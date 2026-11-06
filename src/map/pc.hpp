@@ -35,10 +35,10 @@ enum sc_type : int16;
 
 class MapGuild;
 
-#define MAX_PC_BONUS 50 /// Max bonus, usually used by item bonus
+#define MAX_PC_BONUS 100 /// Max bonus, usually used by item bonus
 #define MAX_PC_FEELHATE 3 /// Max feel hate info
 #define MAX_SPIRITBALL 15 /// Max spirit balls
-#define MAX_DEVOTION 5 /// Max Devotion slots
+#define MAX_DEVOTION 10 /// Max Devotion slots
 #define MAX_SPIRITCHARM 10 /// Max spirit charms
 #define MAX_SOUL_BALL 20 /// Max soul ball
 #define MAX_STELLAR_MARKS 5 /// Max stellar marks
