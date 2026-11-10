@@ -21,7 +21,7 @@ OnTimer1000:
 	end;
 
 OnUpdateClock:
-	.@format = 1; // 0 = 12-hour, 1 = 24-hour
+	.@format = 0; // 0 = 12-hour, 1 = 24-hour
 	delwaitingroom;
 	waitingroom ((.@format ? "      " : "    ") + gettimestr((.@format ? "%T" : "%r"), 21)), 0;
 	return;
