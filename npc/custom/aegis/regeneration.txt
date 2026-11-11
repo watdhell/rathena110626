@@ -12,9 +12,9 @@
 //============================================================
 
 function	script	F_FasterRegen	{
-	.@hp = 2;		// HP heal percentage per pulse (1–100)
-	.@sp = 2;		// SP heal percentage per pulse (1–100)
-	.@range = 200;	// Range effect coordinate
+	.@hp = 30;		// HP heal percentage per pulse (1–100)
+	.@sp = 30;		// SP heal percentage per pulse (1–100)
+	.@range = 100;	// Range effect coordinate
 
 	getmapxy .@map$, .@x, .@y, BL_NPC, strnpcinfo(3);
 	
@@ -38,7 +38,7 @@ function	script	F_FasterRegen	{
 //============================================================
 // Duplicates
 //============================================================
-aegis,84,84,6	script	FasterRegen::custom_regeneration_aegis	-1,{
+aegis,83,76,6	script	FasterRegen::custom_regeneration_aegis	-1,{
 OnTimer5000:
 	callfunc "F_FasterRegen", "aegis";
 	initnpctimer;

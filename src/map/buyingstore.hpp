@@ -11,7 +11,7 @@
 struct s_search_store_search;
 class map_session_data;
 
-#define MAX_BUYINGSTORE_SLOTS 5
+#define MAX_BUYINGSTORE_SLOTS 20
 
 struct s_buyingstore_item
 {

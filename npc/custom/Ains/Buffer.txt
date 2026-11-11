@@ -1,0 +1,20 @@
+aegis,81,80,5	script	Buffer	444,{
+	//buffs for everyone
+	specialeffect2 EF_INCAGILITY;
+	sc_start SC_INCREASEAGI,600000,10;
+	specialeffect2 EF_BLESSING;
+	sc_start SC_BLESSING,600000,10;
+//	specialeffect2 EF_HEAL2;
+//	percentheal 100,100;
+	
+	//vip buffs
+	if(vip_status(VIP_STATUS_ACTIVE)){
+		sc_start SC_STRFOOD,600000,10;
+		sc_start SC_INTFOOD,600000,10;
+		sc_start SC_DEXFOOD,600000,10;
+		sc_start SC_AGIFOOD,600000,10;
+		sc_start SC_VITFOOD,600000,10;
+		sc_start SC_LUKFOOD,600000,10;
+	}
+end;
+}

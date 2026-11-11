@@ -17,7 +17,8 @@ aegis,104,80,4	script	Ragnarok Coin Trader	900,{
 	mes "Do you want to trade Ragnarok Coins into Cash Points or vice versa?";
 	mes "You have ^1A66FF" + callfunc("F_InsertComma", .@roCoinAmount) + "^000000 " + ((.@roCoinAmount != 1) ? callfunc("F_GetPlural", .roCoinName$) : .roCoinName$) + " and ^1A66FF" + callfunc("F_InsertComma", #CASHPOINTS) + "^000000 Cash Points.";
 	next;
-	switch(select("^FF3355Ragnarok Coins^000000 ^727272>^000000 ^1A66FFCash Points^000000:^1A66FFCash Points^000000 ^727272>^000000 ^FF3355Ragnarok Coins^000000:Buy ^FF3355Ragnarok Coin^000000:^727272Cancel^000000")) {
+//	switch(select("^FF3355Ragnarok Coins^000000 ^727272>^000000 ^1A66FFCash Points^000000:^1A66FFCash Points^000000 ^727272>^000000 ^FF3355Ragnarok Coins^000000:Buy ^FF3355Ragnarok Coin^000000:^727272Cancel^000000")) {
+	switch(select("^FF3355Ragnarok Coins^000000 ^727272>^000000 ^1A66FFCash Points^000000:^1A66FFCash Points^000000 ^727272>^000000 ^FF3355Ragnarok Coins^000000:^727272Cancel^000000")) {
 		case 1:
 			mes .npcName$;
 			mes "How many " + .roCoinName$ + " do you want to trade?";

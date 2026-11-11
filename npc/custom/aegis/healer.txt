@@ -18,7 +18,7 @@
 	disable_items;
 
 	//=====  SETTINGS  =====//
-	.delay			= 5;	// NPC delay (in seconds)
+	.delay			= 3;	// NPC delay (in seconds)
 	.itemBuffDelay	= 30;	// Item-based buff cooldown (seconds)
 
 	.healFee		= true; 	// Toggle payment requirement for Heal functions
@@ -39,30 +39,30 @@
 	.identify		= true;	// Automatic identify
 	.removeDebuff	= true;	// Remove negative status
 
-	.healHp			= 100;	// HP heal percentage per pulse (0–100)
-	.healSp			= 100;	// SP heal percentage per pulse (0–100)
+	.healHp			= 50;	// HP heal percentage per pulse (0–100)
+	.healSp			= 50;	// SP heal percentage per pulse (0–100)
 	.healCount		= 3;	// Number of heal pulses
-	.healInterval	= 5;	// Delay between each heal pulse (in seconds)
+	.healInterval	= 3;	// Delay between each heal pulse (in seconds)
 
-	.foodBuff		= false;	// Food buff (All stats)
+	.foodBuff		= true;	// Food buff (All stats)
 	.foodBuffLevel	= 10;		// Food buff level
 
 	//=====  BUFF TOGGLES  =====//
 	.enableAcolyte			= true;	// Acolyte basic
 	.enablePriest			= true;	// Priest basic
-	.enablePrAspersio		= true;	// Priest (Aspersio)
-	.enablePrSacramenti		= true;	// Priest (B.S Sacramenti)
-	.enableHighPriest		= true;	// High Priest (Assumptio)
-	.enableBlacksmith		= true;	// Blacksmith basic
-	.enableBsOverThrust		= true;	// Blacksmith (Over Thrust)
-	.enableAlProtection		= true;	// Alchemist (Chemical Protection)
-	.enableAlBerserk		= true;	// Alchemist (Berserk Pitcher)
-	.enableCrusader			= true;	// Crusader (Providence)
-	.enableSniper			= true;	// Sniper (Wind Walk)
-	.enableSoulLinker		= true;	// Soul Linker (Spirit)
-	.enableSoulLinkerKa		= true;	// Soul Linker (Ka)
-	.enableAssassin			= true;	// Assassin (Enchant Poison)
-	.enableSageElemental	= true;	// Sage (Elemental Weapon)
+	.enablePrAspersio		= false;	// Priest (Aspersio)
+	.enablePrSacramenti		= false;	// Priest (B.S Sacramenti)
+	.enableHighPriest		= false;	// High Priest (Assumptio)
+	.enableBlacksmith		= false;	// Blacksmith basic
+	.enableBsOverThrust		= false;	// Blacksmith (Over Thrust)
+	.enableAlProtection		= false;	// Alchemist (Chemical Protection)
+	.enableAlBerserk		= false;	// Alchemist (Berserk Pitcher)
+	.enableCrusader			= false;	// Crusader (Providence)
+	.enableSniper			= false;	// Sniper (Wind Walk)
+	.enableSoulLinker		= false;	// Soul Linker (Spirit)
+	.enableSoulLinkerKa		= false;	// Soul Linker (Ka)
+	.enableAssassin			= false;	// Assassin (Enchant Poison)
+	.enableSageElemental	= false;	// Sage (Elemental Weapon)
 
 
 
