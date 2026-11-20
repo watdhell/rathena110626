@@ -1,0 +1,257 @@
+
+////////////////////////////////////////////////////////////
+// rAthena - Permanent Stat Booster NPC
+// Gives 10 permanent base stat points per purchase.
+// Features:
+// - Item currency
+// - VIP discount
+// - Daily purchase limits
+// - Configurable maximum stat
+// - Account-wide daily purchase tracking
+////////////////////////////////////////////////////////////
+
+aegis,82,72,4	script	Stat Booster	4_F_KAFRA1,{
+
+	//======================================================
+	// CONFIGURATION
+	//======================================================
+
+	// Item currency
+	.CurrencyID = 607;       // Example: Yggdrasil Berry
+	.BaseCost = 10;          // Cost per 10 stat points
+
+	// Stat configuration
+	.StatIncrease = 10;      // Points given per purchase
+	.MaxStat = 1000;          // Maximum allowed base stat
+
+	// VIP configuration
+	.VIPDiscount = 30;       // 30% discount
+	.VIPDailyLimit = 10;     // VIP daily purchases
+	.NormalDailyLimit = 3;   // Normal daily purchases
+
+	//======================================================
+	// PLAYER CHECKS
+	//======================================================
+
+	.@isvip = vip_status(VIP_STATUS_ACTIVE);
+
+	if (.@isvip) {
+		.@limit = .VIPDailyLimit;
+		.@discount = .VIPDiscount;
+	} else {
+		.@limit = .NormalDailyLimit;
+		.@discount = 0;
+	}
+
+	//======================================================
+	// DAILY RESET
+	// Account-wide daily tracking
+	//======================================================
+
+	.@today = gettime(6) * 10000
+	        + gettime(5) * 100
+	        + gettime(4);
+
+	if (#StatBoosterDay != .@today) {
+		#StatBoosterDay = .@today;
+		#StatBoosterCount = 0;
+	}
+
+	//======================================================
+	// MAIN MENU
+	//======================================================
+
+	mes "[Stat Booster]";
+	mes "Welcome to the Permanent Stat Booster!";
+	mes " ";
+	mes "Purchase permanent base stat increases.";
+	mes " ";
+	mes "^0000FFPoints per purchase:^000000 "+.StatIncrease;
+	mes "^0000FFMaximum base stat:^000000 "+.MaxStat;
+	mes " ";
+
+	if (.@isvip) {
+		mes "^00AA00VIP ACCOUNT^000000";
+		mes "Your discount: "+.@discount+"%";
+	} else {
+		mes "Account type: Normal";
+		mes "VIP members receive discounts!";
+	}
+
+	mes " ";
+	mes "Daily purchases: "+#StatBoosterCount+" / "+.@limit;
+
+	next;
+
+	//======================================================
+	// STAT SELECTION
+	//======================================================
+
+	.@menu = select(
+		"Increase STR",
+		"Increase AGI",
+		"Increase VIT",
+		"Increase INT",
+		"Increase DEX",
+		"Increase LUK",
+		"Cancel"
+	);
+
+	if (.@menu == 7)
+		close;
+
+	switch (.@menu) {
+		case 1:
+			.@stat = bStr;
+			.@statname$ = "STR";
+			break;
+
+		case 2:
+			.@stat = bAgi;
+			.@statname$ = "AGI";
+			break;
+
+		case 3:
+			.@stat = bVit;
+			.@statname$ = "VIT";
+			break;
+
+		case 4:
+			.@stat = bInt;
+			.@statname$ = "INT";
+			break;
+
+		case 5:
+			.@stat = bDex;
+			.@statname$ = "DEX";
+			break;
+
+		case 6:
+			.@stat = bLuk;
+			.@statname$ = "LUK";
+			break;
+	}
+
+	//======================================================
+	// VALIDATION
+	//======================================================
+
+	.@current = readparam(.@stat);
+
+	// Maximum stat check
+	if (.@current + .StatIncrease > .MaxStat) {
+		mes "[Stat Booster]";
+		mes "You cannot purchase this upgrade.";
+		mes " ";
+		mes "Selected stat: "+.@statname$;
+		mes "Current stat: "+.@current;
+		mes "Maximum allowed: "+.MaxStat;
+		mes " ";
+		mes "Your stat would exceed the maximum.";
+		close;
+	}
+
+	// Daily purchase limit
+	if (#StatBoosterCount >= .@limit) {
+		mes "[Stat Booster]";
+		mes "^FF0000You have reached your daily purchase limit!^000000";
+		mes " ";
+		mes "Daily limit: "+.@limit;
+		mes "Purchases today: "+#StatBoosterCount;
+		close;
+	}
+
+	//======================================================
+	// CALCULATE PRICE
+	//======================================================
+
+	// Round discounted price UP to the nearest item.
+	.@cost = (.BaseCost * (100 - .@discount) + 99) / 100;
+
+	if (.@cost < 1)
+		.@cost = 1;
+
+	// Check currency
+	if (countitem(.CurrencyID) < .@cost) {
+		mes "[Stat Booster]";
+		mes "You do not have enough currency.";
+		mes "You need ^0000FF" + getitemname(.CurrencyID) + "^000000!";
+		mes "Required: "+.@cost;
+		mes "Current: "+countitem(.CurrencyID);
+		mes " ";
+		mes "Please bring more items.";
+		close;
+	}
+
+	//======================================================
+	// PURCHASE CONFIRMATION
+	//======================================================
+
+	mes "[Stat Booster]";
+	mes "Please confirm your purchase.";
+	mes " ";
+	mes "Selected stat: ^0000FF"+.@statname$+"^000000";
+	mes "Current stat: "+.@current;
+	mes "After purchase: "+(.@current + .StatIncrease);
+	mes " ";
+	mes "Stat increase: +"+.StatIncrease;
+	mes "Item cost: "+.@cost;
+	mes "Remaining daily purchases: "+(.@limit - #StatBoosterCount - 1);
+	next;
+
+	if (select("Purchase:Cancel") == 2)
+		close;
+
+	//======================================================
+	// FINAL VALIDATION
+	//======================================================
+
+	// Recheck before charging.
+	if (countitem(.CurrencyID) < .@cost)
+		close;
+
+	if (readparam(.@stat) + .StatIncrease > .MaxStat) {
+		mes "[Stat Booster]";
+		mes "Your stat has changed.";
+		mes "Purchase cancelled.";
+		close;
+	}
+
+	if (#StatBoosterCount >= .@limit) {
+		mes "[Stat Booster]";
+		mes "Your daily limit has been reached.";
+		close;
+	}
+
+	//======================================================
+	// PROCESS PURCHASE
+	//======================================================
+
+	delitem .CurrencyID, .@cost;
+
+	// Permanently increase base stat.
+	statusup2 .@stat, .StatIncrease;
+
+	// Record account-wide purchase.
+	#StatBoosterCount++;
+
+	//======================================================
+	// SUCCESS
+	//======================================================
+
+	specialeffect2 EF_BLESSING;
+
+	mes "[Stat Booster]";
+	mes "^00AA00Purchase successful!^000000";
+	mes " ";
+	mes "Stat: "+.@statname$;
+	mes "Previous stat: "+.@current;
+	mes "New stat: "+readparam(.@stat);
+	mes " ";
+	mes "Items spent: "+.@cost;
+	mes "Daily purchases: "+#StatBoosterCount+" / "+.@limit;
+	mes " ";
+	mes "Thank you for your purchase!";
+
+	close;
+}

@@ -8,7 +8,7 @@
 //================================================================|
 //= Autoloot Settings							                 =|
 //================================================================|
-prontera,255,55,4	script	Autoloot Settings	123,{
+aegis,95,89,5	script	Autoloot Settings	123,{
 	function autoloot_setting; function aloot_setid;
 	autoloot_setting();
 
@@ -18,7 +18,7 @@ function	autoloot_setting	{
 	next;
 	explode(.@alootid$,alootid$,":");
 	.@menu$ += "Quit" + ":";
-	for(.@i = 0; .@i < 10; .@i++){
+	for(.@i = 0; .@i < 30; .@i++){
 		if(atoi(.@alootid$[.@i]) == 0){
 			.@menu$ += "^202020Slot ["+(.@i+1)+"] Empty^000000" + ":";
 		} else {

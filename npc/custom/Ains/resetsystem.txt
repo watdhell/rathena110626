@@ -1,0 +1,545 @@
+//============================================================
+// SQL
+//============================================================
+/*
+
+CREATE TABLE IF NOT EXISTS `rebirth_status` (
+    `char_id` INT UNSIGNED NOT NULL,
+    `account_id` INT UNSIGNED NOT NULL,
+    `reset_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `updated_at` DATETIME NOT NULL
+        DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`char_id`),
+    KEY `account_id` (`account_id`),
+    KEY `reset_count` (`reset_count`)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS `rebirth_logs` (
+    `log_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `char_id` INT UNSIGNED NOT NULL,
+    `account_id` INT UNSIGNED NOT NULL,
+    `char_name` VARCHAR(30) NOT NULL,
+    `reset_number` INT UNSIGNED NOT NULL,
+    `action` VARCHAR(20) NOT NULL DEFAULT 'RESET',
+    `consumed_item_id` INT UNSIGNED NOT NULL DEFAULT 0,
+    `consumed_amount` INT UNSIGNED NOT NULL DEFAULT 0,
+    `reward_item_id` INT UNSIGNED NOT NULL DEFAULT 0,
+    `reward_amount` INT UNSIGNED NOT NULL DEFAULT 0,
+    `bonus_stat_points` INT UNSIGNED NOT NULL DEFAULT 0,
+    `admin_name` VARCHAR(30) NOT NULL DEFAULT '',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`log_id`),
+    KEY `char_id` (`char_id`),
+    KEY `account_id` (`account_id`),
+    KEY `reset_number` (`reset_number`),
+    KEY `created_at` (`created_at`),
+    KEY `action` (`action`)
+) ENGINE=InnoDB;
+
+*/
+
+//============================================================
+// rAthena Rebirth / Level Reset System
+//============================================================
+// Features:
+// - Base and Job Level reset
+// - Configurable required item
+// - Configurable milestone stat points
+// - Configurable milestone item rewards
+// - SQL-backed reset count and history
+// - Character-level concurrent request protection
+// - GM management panel
+// - GM check and set commands
+//
+// Uses resetlvl 2:
+// Base Level 1, Job Level 1, EXP cleared.
+// Preserves class, stats and skills.
+// Equipment is unequipped. [ Still Working ]
+//
+//============================================================
+// Commands
+// @rebirthpanel
+// @rebirthcheck Player123
+// @rebirthset Player123 20
+// @rebirthset Player123 0
+//============================================================
+//============================================================
+
+aegis,89,80,4	script	Rebirth Master	4_M_OLDFRIAR,{
+
+    mes "[Rebirth Master]";
+    mes "Welcome to the Rebirth System.";
+    mes " ";
+    mes "Current rebirth count: ^0000FF"+callfunc("RB_GetCount",getcharid(0))+"^000000";
+    mes " ";
+    mes "Every "+.MilestoneInterval+" rebirths:";
+    mes "^00AA00"+.MilestoneStats+" bonus stat points^000000";
+    mes "^00AA00"+.MilestoneRewardAmount+" x "+getitemname(.MilestoneRewardItem)+"^000000";
+    next;
+
+    switch(select("Rebirth now:View requirements:Cancel")) {
+
+        case 1:
+            callsub S_Rebirth;
+            close;
+
+        case 2:
+            mes "[Rebirth Master]";
+            mes "Requirements:";
+            mes "Base Level: "+.RequiredBaseLevel;
+            mes "Job Level: "+.RequiredJobLevel;
+            mes "Required Item: "+getitemname(.RequiredItem);
+            mes "Quantity: "+.RequiredAmount;
+            mes " ";
+            mes "Your current levels:";
+            mes "Base: "+BaseLevel;
+            mes "Job: "+JobLevel;
+            close;
+
+        default:
+            close;
+    }
+
+S_Rebirth:
+
+    .@char_id = getcharid(0);
+    .@account_id = getcharid(3);
+
+    // Initialize SQL record.
+    query_sql(
+        "INSERT IGNORE INTO `rebirth_status` "+
+        "(`char_id`,`account_id`,`reset_count`) "+
+        "VALUES ("+.@char_id+","+.@account_id+",0)"
+    );
+
+    .@count = callfunc("RB_GetCount",.@char_id);
+
+    mes "[Rebirth Master]";
+    mes "Current rebirth count: "+.@count;
+    mes "Next rebirth count: "+(.@count+1);
+    mes " ";
+    mes "This will reset your Base Level and Job Level.";
+    mes "Your job class, stats and skills will remain.";
+    mes "Your equipment will be unequipped.";
+    mes " ";
+    mes "Required item: "+getitemname(.RequiredItem);
+    mes "Quantity: "+.RequiredAmount;
+    next;
+
+    if (select("Confirm rebirth:Cancel") == 2)
+        return;
+
+    // Recheck eligibility after confirmation.
+    if (BaseLevel < .RequiredBaseLevel) {
+        mes "[Rebirth Master]";
+        mes "You do not meet the Base Level requirement.";
+        return;
+    }
+
+    if (JobLevel < .RequiredJobLevel) {
+        mes "[Rebirth Master]";
+        mes "You do not meet the Job Level requirement.";
+        return;
+    }
+
+    if (.MaximumResets > 0 && .@count >= .MaximumResets) {
+        mes "[Rebirth Master]";
+        mes "You have reached the maximum rebirth count.";
+        return;
+    }
+
+    if (countitem(.RequiredItem) < .RequiredAmount) {
+        mes "[Rebirth Master]";
+        mes "You do not have enough required items.";
+        return;
+    }
+
+	if (@RB_LastReset > 0 &&
+    gettimetick(2) - @RB_LastReset < .Cooldown) {
+    mes "[Rebirth Master]";
+    mes "Please wait before attempting another rebirth.";
+    return;
+	}
+
+    // Prevent simultaneous requests for the same character.
+    // This global lock is set only after all dialog operations.
+    .@lock$ = "$@RB_LOCK_"+.@char_id;
+
+    if (getd(.@lock$)) {
+        mes "[Rebirth Master]";
+        mes "A rebirth request is already processing.";
+        return;
+    }
+
+    setd .@lock$,1;
+
+    // Recheck all important conditions after acquiring lock.
+    if (BaseLevel < .RequiredBaseLevel ||
+        JobLevel < .RequiredJobLevel ||
+        countitem(.RequiredItem) < .RequiredAmount) {
+
+        setd .@lock$,0;
+        mes "[Rebirth Master]";
+        mes "Your requirements have changed.";
+        return;
+    }
+
+    // Re-read authoritative SQL count.
+    .@count = callfunc("RB_GetCount",.@char_id);
+
+    if (.MaximumResets > 0 && .@count >= .MaximumResets) {
+        setd .@lock$,0;
+        mes "[Rebirth Master]";
+        mes "Maximum rebirth count reached.";
+        return;
+    }
+
+    // Determine the next reset number.
+    .@new_count = .@count + 1;
+
+    // Determine milestone rewards.
+    .@stat_reward = 0;
+    .@item_reward = 0;
+    .@item_amount = 0;
+
+    if (.@new_count % .MilestoneInterval == 0) {
+        .@stat_reward = .MilestoneStats;
+        .@item_reward = .MilestoneRewardItem;
+        .@item_amount = .MilestoneRewardAmount;
+    }
+
+    // Check inventory capacity before consuming anything.
+    if (.@item_reward > 0 && .@item_amount > 0) {
+        if (!checkweight(.@item_reward,.@item_amount)) {
+            setd .@lock$,0;
+            mes "[Rebirth Master]";
+            mes "Please free some inventory weight.";
+            return;
+        }
+    }
+
+    // Check stat point overflow.
+    if (.@stat_reward > 0 &&
+        StatusPoint + .@stat_reward > .MaxStatPointReward) {
+        setd .@lock$,0;
+        mes "[Rebirth Master]";
+        mes "Your remaining stat point capacity is insufficient.";
+        return;
+    }
+
+    // Consume required item.
+    delitem .RequiredItem,.RequiredAmount;
+
+    // Reset Base Level and Job Level.
+    resetlvl 2;
+
+    // Award milestone stat points.
+    if (.@stat_reward > 0)
+        set StatusPoint,StatusPoint+.@stat_reward;
+
+    // Award milestone item.
+    if (.@item_reward > 0 && .@item_amount > 0)
+        getitem .@item_reward,.@item_amount;
+
+    // Save new authoritative count.
+    query_sql(
+        "UPDATE `rebirth_status` SET "+
+        "`reset_count`="+.@new_count+","+
+        "`account_id`="+.@account_id+
+        " WHERE `char_id`="+.@char_id
+    );
+
+    // Record successful reset.
+    query_sql(
+        "INSERT INTO `rebirth_logs` "+
+        "(`char_id`,`account_id`,`char_name`,`reset_number`,"+
+        "`action`,`consumed_item_id`,`consumed_amount`,"+
+        "`reward_item_id`,`reward_amount`,`bonus_stat_points`) "+
+        "VALUES ("+
+        .@char_id+","+
+        .@account_id+",'"+
+        escape_sql(strcharinfo(0))+"',"+
+        .@new_count+",'RESET',"+
+        .RequiredItem+","+
+        .RequiredAmount+","+
+        .@item_reward+","+
+        .@item_amount+","+
+        .@stat_reward+")"
+    );
+
+    // Release lock.
+    setd .@lock$,0;
+
+    // Apply a short cooldown.
+    set @RB_LastReset,gettimetick(2);
+
+    mes "[Rebirth Master]";
+    mes "^00AA00Rebirth successful!^000000";
+    mes " ";
+    mes "Rebirth number: "+.@new_count;
+    mes "Base Level: "+BaseLevel;
+    mes "Job Level: "+JobLevel;
+
+    if (.@stat_reward > 0) {
+        mes "Bonus stat points: "+.@stat_reward;
+    }
+
+    if (.@item_reward > 0) {
+        mes "Reward: "+getitemname(.@item_reward);
+        mes "Quantity: "+.@item_amount;
+    }
+
+    return;
+
+OnInit:
+
+    //========================================================
+    // CONFIGURATION
+    //========================================================
+
+    .RequiredBaseLevel = 255;
+    .RequiredJobLevel = 120;
+
+    .RequiredItem = 7227;
+    .RequiredAmount = 1;
+
+    .MilestoneInterval = 10;
+
+    .MilestoneStats = 100;
+
+    .MilestoneRewardItem = 607;
+    .MilestoneRewardAmount = 10;
+
+	.Cooldown = 3;
+
+    // 0 = Unlimited
+    .MaximumResets = 0;
+
+    // Maximum allowed stat point balance after a milestone.
+    // Adjust for your server configuration.
+    .MaxStatPointReward = 100000;
+
+    .GMLevel = 80;
+
+bindatcmd "rebirthpanel",
+    "Rebirth_GM_Manager::OnGMPanel",80,80;
+
+bindatcmd "rebirthcheck",
+    "Rebirth_GM_Manager::OnGMCheck",80,80;
+
+bindatcmd "rebirthset",
+    "Rebirth_GM_Manager::OnGMSet",80,80;
+    end;
+}
+
+//============================================================
+// FUNCTION: GET RESET COUNT
+//============================================================
+
+function	script	RB_GetCount	{
+
+    .@char_id = getarg(0);
+
+    .@rows = query_sql(
+        "SELECT `reset_count` FROM `rebirth_status` "+
+        "WHERE `char_id`="+.@char_id,
+        .@count
+    );
+
+    if (.@rows <= 0)
+        return 0;
+
+    return .@count;
+}
+
+//============================================================
+// GM MANAGEMENT PANEL
+//============================================================
+
+-	script	Rebirth_GM_Manager	-1,{
+
+OnGMPanel:
+
+    if (getgmlevel() < 80) {
+        dispbottom "You do not have permission.";
+        end;
+    }
+
+    mes "[Rebirth GM Manager]";
+    mes "Select an administrative operation.";
+    next;
+
+    switch(select(
+        "Check player rebirth count:"+
+        "Adjust player rebirth count:"+
+        "View recent reset history:"+
+        "Close"
+    )) {
+
+        case 1:
+            input .@name$;
+            callsub S_Check,.@name$;
+            end;
+
+        case 2:
+            input .@name$;
+            input .@new_count;
+
+            if (.@new_count < 0 || .@new_count > 2147483647) {
+                mes "Invalid reset count.";
+                close;
+            }
+
+            callsub S_Set,.@name$,.@new_count;
+            end;
+
+        case 3:
+            input .@name$;
+            callsub S_History,.@name$;
+            end;
+
+        default:
+            close;
+    }
+
+S_Check:
+
+    .@name$ = getarg(0);
+
+    .@rows = query_sql(
+        "SELECT c.`char_id`,c.`account_id`,c.`name`,"+
+        "COALESCE(r.`reset_count`,0) "+
+        "FROM `char` c LEFT JOIN `rebirth_status` r "+
+        "ON c.`char_id`=r.`char_id` "+
+        "WHERE c.`name`='"+escape_sql(.@name$)+"' LIMIT 1",
+        .@char_id,.@account_id,.@real_name$,.@count
+    );
+
+    if (.@rows <= 0) {
+        mes "Character not found.";
+        return;
+    }
+
+    mes "[Rebirth GM Manager]";
+    mes "Character: "+.@real_name$;
+    mes "Character ID: "+.@char_id;
+    mes "Account ID: "+.@account_id;
+    mes "Reset count: "+.@count;
+    return;
+
+S_Set:
+
+    .@name$ = getarg(0);
+    .@new_count = getarg(1);
+
+    .@rows = query_sql(
+        "SELECT `char_id`,`account_id`,`name` "+
+        "FROM `char` WHERE `name`='"+escape_sql(.@name$)+"' LIMIT 1",
+        .@char_id,.@account_id,.@real_name$
+    );
+
+    if (.@rows <= 0) {
+        mes "Character not found.";
+        return;
+    }
+
+    query_sql(
+        "INSERT INTO `rebirth_status` "+
+        "(`char_id`,`account_id`,`reset_count`) VALUES ("+
+        .@char_id+","+.@account_id+","+.@new_count+") "+
+        "ON DUPLICATE KEY UPDATE "+
+        "`account_id`=VALUES(`account_id`),"+
+        "`reset_count`=VALUES(`reset_count`)"
+    );
+
+    query_sql(
+        "INSERT INTO `rebirth_logs` "+
+        "(`char_id`,`account_id`,`char_name`,`reset_number`,"+
+        "`action`,`admin_name`) VALUES ("+
+        .@char_id+","+.@account_id+",'"+
+        escape_sql(.@real_name$)+"',"+
+        .@new_count+",'ADMIN_SET','"+
+        escape_sql(strcharinfo(0))+"')"
+    );
+
+    mes "[Rebirth GM Manager]";
+    mes "Reset count successfully adjusted.";
+    mes "Character: "+.@real_name$;
+    mes "New reset count: "+.@new_count;
+    return;
+
+S_History:
+
+    .@name$ = getarg(0);
+
+    .@rows = query_sql(
+        "SELECT `reset_number`,`action`,`consumed_item_id`,"+
+        "`consumed_amount`,`reward_item_id`,`reward_amount`,"+
+        "`bonus_stat_points`,`admin_name`,`created_at` "+
+        "FROM `rebirth_logs` "+
+        "WHERE `char_name`='"+escape_sql(.@name$)+"' "+
+        "ORDER BY `log_id` DESC LIMIT 10",
+        .@reset,.@action$,.@consumed,.@consumed_amount,
+        .@reward,.@reward_amount,.@stats,.@admin$,.@date$
+    );
+
+    mes "[Rebirth History]";
+    mes "Character: "+.@name$;
+
+    if (.@rows <= 0) {
+        mes "No history found.";
+        return;
+    }
+
+    for (.@i = 0; .@i < .@rows; .@i++) {
+        mes "--------------------";
+        mes "Reset: "+.@reset[.@i];
+        mes "Action: "+.@action$[.@i];
+        mes "Consumed: "+.@consumed[.@i]+
+            " x "+.@consumed_amount[.@i];
+        mes "Reward: "+.@reward[.@i]+
+            " x "+.@reward_amount[.@i];
+        mes "Bonus stats: "+.@stats[.@i];
+        mes "Admin: "+.@admin$[.@i];
+        mes "Date: "+.@date$[.@i];
+    }
+
+    return;
+
+OnGMCheck:
+
+    if (getgmlevel() < 80)
+        end;
+
+    if (.@atcmd_numparameters < 1) {
+        dispbottom "Usage: @rebirthcheck CharacterName";
+        end;
+    }
+
+    .@name$ = .@atcmd_parameters$[0];
+
+    callsub S_Check,.@name$;
+    end;
+
+OnGMSet:
+
+    if (getgmlevel() < 80)
+        end;
+
+    if (.@atcmd_numparameters < 2) {
+        dispbottom "Usage: @rebirthset CharacterName Count";
+        end;
+    }
+
+    .@name$ = .@atcmd_parameters$[0];
+    .@new_count = atoi(.@atcmd_parameters$[1]);
+
+    if (.@new_count < 0 || .@new_count > 2147483647) {
+        dispbottom "Invalid reset count.";
+        end;
+    }
+
+    callsub S_Set,.@name$,.@new_count;
+    end;
+}

@@ -307,9 +307,22 @@ int32 chrif_save(map_session_data *sd, int32 flag) {
 	if (sd->premiumStorage.dirty)
 		storage_premiumStorage_save(sd);
 
-	if (flag&CSAVE_QUITTING)
+	if (flag&CSAVE_QUITTING) {
 		sd->state.storage_flag = 0; //Force close it.
+		if (sd->goldpc_tid != INVALID_TIMER) {
+			if (const TimerData* td = get_timer(sd->goldpc_tid); td != nullptr) {
+				const t_tick remaining = DIFF_TICK(td->tick, gettick()) > 0 ? DIFF_TICK(td->tick, gettick()) : 0;
+				int32 elapsed = battle_config.feature_goldpc_time - static_cast<int32>((remaining + 999) / 1000);
+				elapsed = elapsed < 0 ? 0 : (elapsed > battle_config.feature_goldpc_time ? battle_config.feature_goldpc_time : elapsed);
+				pc_setreg2(sd, GOLDPC_SECONDS_VAR, elapsed);
+			}
 
+			delete_timer(sd->goldpc_tid, pc_goldpc_update);
+			sd->goldpc_tid = INVALID_TIMER;
+		}
+	}
+
+	
 	//Saving of registry values.
 	if (sd->vars_dirty)
 		intif_saveregistry(sd);
@@ -1586,6 +1599,7 @@ void chrif_parse_ack_vipActive(int32 fd) {
 	if (((flag&0x4) || changed) && !sd->vip.disableshowrate) {
 		clif_display_pinfo( *sd );
 	}
+	clif_goldpc_info(*sd);
 #endif
 }
 

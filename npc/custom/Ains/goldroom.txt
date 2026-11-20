@@ -1,0 +1,305 @@
+
+/*
+============================================================
+ RAGNAROK ONLINE - GOLD ROOM SYSTEM
+ Emulator: rAthena
+============================================================
+ Features:
+ - Automatic opening and closing
+ - Hidden NPC when closed
+ - Daily account-based entry limit
+ - VIP bonus entries using GM group level
+ - Midnight daily reset
+ - Gold-only custom monster
+ - Automatic player evacuation
+ - GM commands
+============================================================
+*/
+
+//============================================================
+// GOLD ROOM CONTROLLER
+//============================================================
+
+-	script	GoldRoom_Controller1	-1,{
+
+OnInit:
+
+	//========================================================
+	// CONFIGURATION
+	//========================================================
+
+	.RoomMap$ = "prt_fild05";
+
+	.TownMap$ = "aegis_guild";
+	.TownX = 21;
+	.TownY = 17;
+
+	// Opening time: 20:00
+	.OpenHour = 20;
+	.OpenMinute = 0;
+
+	// Closing time: 21:00
+	.CloseHour = 21;
+	.CloseMinute = 0;
+
+	// Entry limits
+	.NormalEntries = 3;
+	.VIPEntries = 5;
+
+	// VIP minimum GM group level
+	.VIPMinLevel = 1;
+
+	// Monster configuration
+	.MonsterID = 1002;
+	.MonsterCount = 300;
+
+	// GM command permission
+	.GMLevel = 99;
+
+	//========================================================
+	// INITIALIZE
+	//========================================================
+
+	$GoldRoomOpen = 0;
+
+	// Register GM commands
+	bindatcmd "goldopen",
+		"GoldRoom_Controller1::OnGMOpen",99,99;
+
+	bindatcmd "goldclose",
+		"GoldRoom_Controller1::OnGMClose",99,99;
+
+	// Restore correct NPC visibility after script reload.
+	// Also restore the room if the server starts during
+	// its scheduled opening period.
+
+	.@now = gettime(DT_HOUR) * 60 + gettime(DT_MINUTE);
+	.@open = .OpenHour * 60 + .OpenMinute;
+	.@close = .CloseHour * 60 + .CloseMinute;
+
+	if (.@now >= .@open && .@now < .@close) {
+		donpcevent strnpcinfo(3)+"::OnOpen";
+	}
+	else {
+		disablenpc "GoldRoom_Entrance";
+	}
+
+	end;
+
+
+//============================================================
+// AUTOMATIC OPENING
+//============================================================
+
+OnClock2000:
+
+	donpcevent strnpcinfo(3)+"::OnOpen";
+	end;
+
+
+//============================================================
+// AUTOMATIC CLOSING
+//============================================================
+
+OnClock2100:
+
+	donpcevent strnpcinfo(3)+"::OnClose";
+	end;
+
+
+//============================================================
+// OPEN GOLD ROOM
+//============================================================
+
+OnOpen:
+
+	if ($GoldRoomOpen)
+		end;
+
+	$GoldRoomOpen = 1;
+
+	// Show entrance NPC
+	enablenpc "GoldRoom_Entrance";
+
+	announce "[Gold Room]: The Gold Room is now OPEN!",bc_all;
+
+	// Remove leftover monsters
+	killmonsterall .RoomMap$,"All";
+
+	// Spawn Gold monsters
+	monster .RoomMap$,0,0,
+		"Gold Poring",.MonsterID,.MonsterCount;
+
+	end;
+
+
+//============================================================
+// CLOSE GOLD ROOM
+//============================================================
+
+// Disable entrance immediately
+	$GoldRoomOpen = 0;
+
+	disablenpc "GoldRoom_Entrance";
+
+	announce "[Gold Room]: The Gold Room is now CLOSED!",bc_all;
+
+	// Remove all monsters
+	killmonsterall .RoomMap$,"All";
+
+	// Get all online players inside Gold Room
+	// (getmapunits returns object IDs, which for BL_PC are account IDs)
+	.@count = getmapunits(BL_PC,.RoomMap$,.@gid[0]);
+
+	// Teleport each player back to town
+	for (.@i = 0; .@i < .@count; .@i++) {
+
+		if (attachrid(.@gid[.@i])) {
+
+			warp .TownMap$,.TownX,.TownY;
+
+			dispbottom "[Gold Room]: You have been returned to Prontera.";
+		}
+	}
+
+	detachrid;
+
+	end;
+
+
+//============================================================
+// MANUAL GM OPEN
+//============================================================
+
+OnGMOpen:
+
+	if (getgmlevel() < .GMLevel) {
+		dispbottom "You are not authorized to use this command.";
+		end;
+	}
+
+	if ($GoldRoomOpen) {
+		dispbottom "Gold Room is already OPEN.";
+		end;
+	}
+
+	dispbottom "You manually opened the Gold Room.";
+
+	donpcevent strnpcinfo(3)+"::OnOpen";
+
+	end;
+
+
+//============================================================
+// MANUAL GM CLOSE
+//============================================================
+
+OnGMClose:
+
+	if (getgmlevel() < .GMLevel) {
+		dispbottom "You are not authorized to use this command.";
+		end;
+	}
+
+	if (!$GoldRoomOpen) {
+		dispbottom "Gold Room is already CLOSED.";
+		end;
+	}
+
+	dispbottom "You manually closed the Gold Room.";
+
+	donpcevent strnpcinfo(3)+"::OnClose";
+
+	end;
+	
+}
+//============================================================
+// GOLD ROOM ENTRANCE NPC
+//============================================================
+
+aegis,95,81,4	script	GoldRoom_Entrance	4_M_YURI,{
+
+	// Check room status
+	if (!$GoldRoomOpen) {
+
+		mes "[Gold Room]";
+		mes "The Gold Room is currently CLOSED.";
+		mes "Please return during its opening hours.";
+		close;
+	}
+
+	//========================================================
+	// DAILY ENTRY RESET
+	//========================================================
+
+	.@today = gettime(DT_YYYYMMDD);
+
+	if (#GOLDROOM_DATE != .@today) {
+
+		#GOLDROOM_DATE = .@today;
+		#GOLDROOM_ENTRIES = 0;
+	}
+
+	//========================================================
+	// VIP CHECK
+	//========================================================
+
+	.@limit = 3;
+
+	if (getgmlevel() >= 1) {
+		.@limit = 5;
+	}
+
+	//========================================================
+	// ENTRY LIMIT CHECK
+	//========================================================
+
+	.@remaining = .@limit - #GOLDROOM_ENTRIES;
+
+	mes "[Gold Room]";
+	mes "Welcome to the Gold Room!";
+	mes " ";
+	mes "Defeat monsters and collect Gold.";
+	mes " ";
+	mes "Your daily entry limit: "+.@limit;
+	mes "Entries used today: "+#GOLDROOM_ENTRIES;
+	mes "Remaining entries: "+.@remaining;
+
+	if (#GOLDROOM_ENTRIES >= .@limit) {
+
+		mes " ";
+		mes "^FF0000You have reached your daily entry limit.^000000";
+		close;
+	}
+
+	next;
+
+	if (select("Enter Gold Room:Cancel") == 2)
+		close;
+
+	// Recheck room status before consuming an entry
+	if (!$GoldRoomOpen) {
+
+		mes "[Gold Room]";
+		mes "The Gold Room has just closed.";
+		close;
+	}
+
+	// Recheck daily entry limit
+	if (#GOLDROOM_ENTRIES >= .@limit) {
+		mes "[Gold Room]";
+		mes "You have no remaining entries.";
+		close;
+	}
+
+	// Consume one entry
+	#GOLDROOM_ENTRIES++;
+
+	announce "[Gold Room]: "+strcharinfo(0)+" has entered the Gold Room!",bc_map;
+
+	// Teleport player
+	warp "prt_fild05",0,0;
+
+	end;
+
+}

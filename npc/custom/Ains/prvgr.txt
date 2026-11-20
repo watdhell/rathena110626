@@ -1,0 +1,365 @@
+//============================================================
+// PRIVATE GOLD ROOM - rent with items
+// Rooms: 06guild_01 ... 06guild_08 (change in OnInit)
+//============================================================
+
+aegis,91,74,4	script	Private Gold Room	4_M_1STPRIN1,{
+
+    .@n$ = "[^0000FFManager^000000]";
+
+    mes .@n$;
+    mes "Hello, "+strcharinfo(0)+", I'm the";
+    mes "Private Gold Room manager.";
+    mes "Here you can rent your own private gold room.";
+    next;
+
+    // ---- room list ----
+    .@cnt = getarraysize($@GR_Maps$);
+    .@menu$ = "";
+    for (.@i = 0; .@i < .@cnt; .@i++)
+        .@menu$ += $@GR_Names$[.@i] + " - " + callsub(S_Status, .@i) + ":";
+    .@menu$ += "Cancel";
+
+    .@r = select(.@menu$) - 1;
+    if (.@r >= .@cnt)
+        close;
+
+    // ---- room already rented ----
+    if ($GR_End[.@r] > gettimetick(2)) {
+        mes .@n$;
+        if (callfunc("GR_Access", .@r)) {
+            mes "Welcome back!";
+            mes "Time left: "+callfunc("GR_Time", $GR_End[.@r] - gettimetick(2));
+            close2;
+            warp $@GR_Maps$[.@r], 0, 0;
+            end;
+        }
+        mes "This room is already in use, please pick a different one.";
+        close;
+    }
+    // old rental that ended but was not cleaned yet
+    if ($GR_End[.@r] > 0)
+        callsub S_Close, .@r;
+
+    // ---- who can use the room ----
+    mes .@n$;
+    mes "You may rent this room for ^0000FFYourself^000000, ^0000FFParty members^000000, or ^0000FFGuild members^000000.";
+    next;
+    .@t = select("Myself Only:Party Members:Guild Members:Cancel") - 1;    // 0 = char, 1 = party, 2 = guild
+    if (.@t > 2)
+        close;
+    if (.@t == 1 && !getcharid(1)) {
+        mes .@n$;
+        mes "You are not in a party.";
+        close;
+    }
+    if (.@t == 2 && !getcharid(2)) {
+        mes .@n$;
+        mes "You are not in a guild.";
+        close;
+    }
+
+    // ---- how long ----
+    .@item$ = getitemname($@GR_PayItem);
+    .@dn = getarraysize($@GR_Times);
+    .@menu$ = "";
+    for (.@i = 0; .@i < .@dn; .@i++)
+        .@menu$ += callfunc("GR_Dur", $@GR_Times[.@i]) + " - " + $@GR_Costs[.@i] + " x " + .@item$ + ":";
+    .@menu$ += "Cancel";
+
+    mes .@n$;
+    mes "How long would you like to rent this room?";
+    next;
+    .@d = select(.@menu$) - 1;
+    if (.@d >= .@dn)
+        close;
+    .@cost = $@GR_Costs[.@d];
+
+    mes .@n$;
+    mes "Rent ^0000FF"+$@GR_Names$[.@r]+"^000000 for ^0000FF"+callfunc("GR_Dur", $@GR_Times[.@d])+"^000000";
+    mes "Price: ^0000FF"+.@cost+" x "+.@item$+"^000000";
+    mes " ";
+    mes "If everybody leaves the room, you have ^FF0000"+callfunc("GR_Dur", $@GR_Grace)+"^000000 to come back before the rental is cancelled (no refund).";
+    next;
+    if (select("Rent it:Cancel") != 1)
+        close;
+
+    // ---- re-check after the dialog pause ----
+    if ($GR_End[.@r] > gettimetick(2)) {
+        mes .@n$;
+        mes "Sorry, someone just rented this room.";
+        close;
+    }
+    if (countitem($@GR_PayItem) < .@cost) {
+        mes .@n$;
+        mes "I'm sorry, you don't have enough "+.@item$+" for that.";
+        emotion ET_CRY;
+        close;
+    }
+
+    delitem $@GR_PayItem, .@cost;
+    $GR_Type[.@r] = .@t;
+    $GR_Owner[.@r] = getcharid(.@t);
+    $GR_OwnerName$[.@r] = strcharinfo(.@t);    // 0 = name, 1 = party name, 2 = guild name
+    $GR_End[.@r] = gettimetick(2) + $@GR_Times[.@d];
+    $GR_Away[.@r] = 0;
+    $@GR_Left[.@r] = 0;
+    $@GR_Ann[.@r] = gettimetick(2) + 60;
+
+    mes .@n$;
+    mes "Enjoy your Gold Room!";
+    close2;
+    warp $@GR_Maps$[.@r], 0, 0;
+    end;
+
+
+// Text shown in the room list
+S_Status:
+    .@r = getarg(0);
+    if ($GR_End[.@r] <= gettimetick(2))
+        return "EMPTY";
+    setarray .@w$[0], "Player", "Party", "Guild";
+    return replacestr($GR_OwnerName$[.@r], ":", " ") + " (" + .@w$[$GR_Type[.@r]] + ", " + callfunc("GR_Time", $GR_End[.@r] - gettimetick(2)) + " left)";
+
+
+// Close a room: send everybody out, remove monsters, free it
+S_Close:
+    .@r = getarg(0);
+    .@map$ = $@GR_Maps$[.@r];
+    mapwarp .@map$, $@GR_ExitMap$, $@GR_ExitX, $@GR_ExitY;
+    killmonster .@map$, "All";
+    $GR_End[.@r] = 0;
+    $GR_Type[.@r] = 0;
+    $GR_Owner[.@r] = 0;
+    $GR_OwnerName$[.@r] = "";
+    $GR_Away[.@r] = 0;
+    $@GR_Left[.@r] = 0;
+    $@GR_Ann[.@r] = 0;
+    return;
+
+
+// @grtime: time left of the room you are in
+OnGrTime:
+    .@r = inarray($@GR_Maps$, strcharinfo(3));
+    if (.@r < 0 || $GR_End[.@r] <= gettimetick(2)) {
+        dispbottom "You are not in a rented Gold Room.";
+        end;
+    }
+    dispbottom callfunc("GR_Time", $GR_End[.@r] - gettimetick(2)) + " remaining!";
+    end;
+
+
+// Checks every 5 seconds: rental over, abandoned room, time announcements
+OnTimer5000:
+    initnpctimer;
+    .@now = gettimetick(2);
+    for (.@r = 0; .@r < getarraysize($@GR_Maps$); .@r++) {
+        if ($GR_End[.@r] <= 0)
+            continue;
+        .@map$ = $@GR_Maps$[.@r];
+        .@users = getmapusers(.@map$);
+
+        // rental time is over
+        if ($GR_End[.@r] <= .@now) {
+            if (.@users)
+                mapannounce .@map$, "Gold Room time has ended!", bc_map|bc_blue;
+            callsub S_Close, .@r;
+            continue;
+        }
+
+        // nobody inside: grace time before the room is abandoned
+        if (!.@users) {
+            if (!$GR_Away[.@r])
+                $GR_Away[.@r] = .@now;
+            else if (.@now - $GR_Away[.@r] >= $@GR_Grace)
+                callsub S_Close, .@r;
+            continue;
+        }
+        $GR_Away[.@r] = 0;
+
+        // announce the time left every minute
+        if (.@now >= $@GR_Ann[.@r]) {
+            $@GR_Ann[.@r] = .@now + 60;
+            mapannounce .@map$, callfunc("GR_Time", $GR_End[.@r] - .@now) + " remaining!", bc_map|bc_blue;
+        }
+    }
+    end;
+
+
+OnInit:
+    //========================================================
+    // CONFIGURATION
+    //========================================================
+    // Room maps and names (same order)
+    setarray $@GR_Maps$[0],  "06guild_01", "06guild_02", "06guild_03", "06guild_04", "06guild_05", "06guild_06", "06guild_07", "06guild_08";
+    setarray $@GR_Names$[0], "PGR 1", "PGR 2", "PGR 3", "PGR 4", "PGR 5", "PGR 6", "PGR 7", "PGR 8";
+
+    // Item used to pay the rent (CHANGE THIS to your TCG item ID)
+    $@GR_PayItem = 7539;
+
+    // Rental times (seconds) and their price (amount of the item), same order
+    setarray $@GR_Times[0], 30*60, 60*60, 120*60, 180*60;
+    setarray $@GR_Costs[0],    100,   150,    250,    350;
+
+    // Seconds the owner has to come back after everybody left the room
+    $@GR_Grace = 300;
+
+    // Where players go when the rental ends
+    $@GR_ExitMap$ = "prontera";
+    $@GR_ExitX = 156;
+    $@GR_ExitY = 191;
+
+    // Item dropped by the monsters (969 = Gold)
+    $@GR_DropItem = 969;
+
+    // Monsters the room NPC can summon:  <mob ID>, <max items per kill>, <amount>
+    setarray $@GR_Mobs[0],
+        1002, 2, 100,
+        1236, 3, 100,
+        1095, 4, 100,
+        1105, 5, 100,
+        1176, 6, 100;
+
+    //========================================================
+    // MAPFLAGS + COMMAND + TIMER
+    //========================================================
+    for (.@i = 0; .@i < getarraysize($@GR_Maps$); .@i++) {
+        setmapflag $@GR_Maps$[.@i], mf_nomemo;
+        setmapflag $@GR_Maps$[.@i], mf_nosave;
+        setmapflag $@GR_Maps$[.@i], mf_noteleport;
+        setmapflag $@GR_Maps$[.@i], mf_nowarp;
+        setmapflag $@GR_Maps$[.@i], mf_nowarpto;
+    }
+    bindatcmd "grtime", strnpcinfo(3)+"::OnGrTime";
+    initnpctimer;
+    end;
+}
+
+
+
+//============================================================
+// ROOM NPC (one per room map): summons the monsters
+//============================================================
+
+06guild_01,47,48,5	script	GoldSummoner#0	100,500,500,{
+
+    .@r = inarray($@GR_Maps$, strcharinfo(3));
+    if (.@r < 0 || !callfunc("GR_Access", .@r)) {
+        warp "SavePoint", 0, 0;
+        end;
+    }
+
+    .@n$ = "[^0000FFManager^000000]";
+
+    if ($@GR_Left[.@r] > 0) {
+        mes .@n$;
+        mes $@GR_Left[.@r]+" mobs still remain!";
+        mes "You need to kill them all before I can summon more.";
+        emotion ET_SWEAT;
+        close;
+    }
+
+    .@len = getarraysize($@GR_Mobs);
+    .@menu$ = "";
+    for (.@h = 0; .@h < .@len; .@h += 3)
+        .@menu$ += getmonsterinfo($@GR_Mobs[.@h], MOB_NAME) + ":";
+    .@menu$ += "Back to SavePoint";
+
+    mes .@n$;
+    mes "Select which mob you'd like me to summon!";
+    next;
+    .@m = select(.@menu$) - 1;
+
+    if (.@m >= .@len / 3) {
+        close2;
+        warp "SavePoint", 0, 0;
+        end;
+    }
+
+    // re-check after the dialog pause
+    if ($@GR_Left[.@r] > 0)
+        close;
+
+    .@k = .@m * 3;
+    $@GR_Drop[.@r] = $@GR_Mobs[.@k + 1];
+    $@GR_Left[.@r] = $@GR_Mobs[.@k + 2];
+    monster strcharinfo(3), 0, 0, "--ja--", $@GR_Mobs[.@k], $@GR_Mobs[.@k + 2], strnpcinfo(0)+"::OnDeathEvent";
+    close;
+
+// Kicks out anybody who is not allowed in this room
+OnTouch:
+    .@r = inarray($@GR_Maps$, strcharinfo(3));
+    if (.@r < 0 || !callfunc("GR_Access", .@r))
+        warp "SavePoint", 0, 0;
+    end;
+
+OnDeathEvent:
+    if (!playerattached())
+        end;
+    .@r = inarray($@GR_Maps$, strcharinfo(3));
+    if (.@r < 0)
+        end;
+    .@max = $@GR_Drop[.@r];
+    if (.@max > 1)
+        .@n = rand(1, .@max);
+    else
+        .@n = 1;
+    getitem $@GR_DropItem, .@n;
+    $@GR_Left[.@r]--;
+    if ($@GR_Left[.@r] <= 0)
+        mapannounce strcharinfo(3), "All monsters have been killed!", bc_map|bc_blue;
+    end;
+}
+
+//DUPLICATIONS
+06guild_02,50,50,5	duplicate(GoldSummoner#0)	GoldSummoner#1	100,500,500
+06guild_03,50,50,5	duplicate(GoldSummoner#0)	GoldSummoner#2	100,500,500
+06guild_04,50,50,5	duplicate(GoldSummoner#0)	GoldSummoner#3	100,500,500
+06guild_05,50,50,5	duplicate(GoldSummoner#0)	GoldSummoner#4	100,500,500
+06guild_06,50,50,5	duplicate(GoldSummoner#0)	GoldSummoner#5	100,500,500
+06guild_07,50,50,5	duplicate(GoldSummoner#0)	GoldSummoner#6	100,500,500
+06guild_08,50,50,5	duplicate(GoldSummoner#0)	GoldSummoner#7	100,500,500
+
+
+//============================================================
+// FUNCTIONS
+//============================================================
+
+// 1 if the attached player can be in room <index>: owner (char / party / guild) while rented, or GM 60+
+function	script	GR_Access	{
+    .@r = getarg(0);
+    if (.@r < 0)
+        return 0;
+    if (getgmlevel() >= 60)
+        return 1;
+    if ($GR_End[.@r] <= gettimetick(2))
+        return 0;
+    .@id = getcharid($GR_Type[.@r]);
+    if (.@id && .@id == $GR_Owner[.@r])
+        return 1;
+    return 0;
+}
+
+// seconds -> "1h 5m 30s"
+function	script	GR_Time	{
+    .@s = getarg(0);
+    if (.@s < 0)
+        .@s = 0;
+    .@h = .@s / 3600;
+    .@m = .@s % 3600 / 60;
+    .@t$ = "";
+    if (.@h)
+        .@t$ += .@h + "h ";
+    if (.@h || .@m)
+        .@t$ += .@m + "m ";
+    .@t$ += (.@s % 60) + "s";
+    return .@t$;
+}
+
+// seconds -> "30 minutes" / "1 hour" / "2 hours"
+function	script	GR_Dur	{
+    .@m = getarg(0) / 60;
+    if (.@m >= 60 && .@m % 60 == 0)
+        return (.@m / 60) + (.@m == 60 ? " hour" : " hours");
+    return .@m + " minutes";
+}

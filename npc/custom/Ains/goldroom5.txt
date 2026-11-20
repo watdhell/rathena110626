@@ -1,0 +1,344 @@
+
+//============================================================
+// RAGNAROK ONLINE - GOLD ROOM SYSTEM
+// Emulator: rAthena
+//============================================================
+
+aegis,99,77,4	script	GoldRoomEntrance	4_M_YURI,{
+
+	mes "[Gold Room]";
+	mes "Welcome to the Gold Room!";
+	mes " ";
+	mes "Collect Gold by defeating monsters.";
+	mes " ";
+	mes "^0000FFDaily Entries:^000000 " + #GR_Entries + " / " + .MaxEntries;
+	mes "^FF0000VIP Bonus:^000000 " + .VIPBonus + " additional entries";
+	mes " ";
+	mes "Opening Time: " + callfunc("F_GR_Time");
+	mes " ";
+
+	if (!$GR_Open) {
+		mes "^FF0000The Gold Room is currently closed.^000000";
+		close;
+	}
+
+	if (gettimetick(2) >= $GR_EndTick) {
+		mes "The Gold Room is closing.";
+		close;
+	}
+
+	// Daily entry reset
+	if (#GR_Date != gettime(DT_YYYYMMDD)) {
+		set #GR_Date, gettime(DT_YYYYMMDD);
+		set #GR_Entries, 0;
+	}
+
+	// VIP daily entry allowance
+	.MaxEntries = 2;
+	.VIPBonus = 3;
+
+	if (vip_status(VIP_STATUS_ACTIVE))
+		.MaxEntries += .VIPBonus;
+
+	mes "Remaining Entries: " + (.MaxEntries - #GR_Entries);
+	next;
+
+	if (#GR_Entries >= .MaxEntries) {
+		mes "[Gold Room]";
+		mes "You have reached your daily entry limit.";
+		close;
+	}
+
+	// Entry cooldown
+	if (gettimetick(2) < #GR_Cooldown) {
+		mes "[Gold Room]";
+		mes "Please wait before entering again.";
+		mes "Remaining cooldown: "
+			+ (#GR_Cooldown - gettimetick(2)) + " seconds.";
+		close;
+	}
+
+	mes "[Gold Room]";
+	mes "Would you like to enter the Gold Room?";
+	next;
+
+	if (select("Enter Gold Room:Cancel") == 2)
+		close;
+
+	// Recheck room status
+	if (!$GR_Open || gettimetick(2) >= $GR_EndTick) {
+		mes "The Gold Room is no longer available.";
+		close;
+	}
+
+	// Consume entry
+	set #GR_Entries, #GR_Entries + 1;
+	set #GR_Cooldown, gettimetick(2) + 60;
+
+	announce strcharinfo(0)
+		+ " has entered the Gold Room!", bc_blue;
+
+	warp "prt_fild01", 50, 50;
+	end;
+
+OnInit:
+	// Entrance configuration
+	.MaxEntries = 2;
+	.VIPBonus = 3;
+	end;
+}
+
+
+//============================================================
+// GOLD ROOM CONTROLLER
+//============================================================
+
+-	script	GoldRoomController	-1,{
+
+OnInit:
+
+	//========================================================
+	// CONFIGURATION
+	//========================================================
+
+	.GoldItemID = 7227;	// CHANGE TO YOUR GOLD ITEM ID
+
+	.GoldMin = 1;
+	.GoldMax = 5;
+
+	.Duration = 60;		// Opening duration in minutes
+	.WarningTime = 5;	// Warning before closing
+
+	.Destination$ = "aegis";
+	.DestinationX = 99;
+	.DestinationY = 77;
+
+	// Monster configuration
+	.MobCount = 2;
+
+	.MobIDs[0] = 1002;	// Poring
+	.MobCounts[0] = 300;
+
+	.MobIDs[1] = 1113;	// Drops
+	.MobCounts[1] = 200;
+
+	// Map configuration
+	setmapflag "prt_fild01", mf_nomobloot;
+
+	// Hide entrance initially
+	hideonnpc "GoldRoomEntrance";
+
+	// Register GM commands
+	bindatcmd "goldopen",
+		strnpcinfo(3) + "::OnGMOpen", 99, 99;
+
+	bindatcmd "goldclose",
+		strnpcinfo(3) + "::OnGMClose", 99, 99;
+
+	bindatcmd "goldtime",
+		strnpcinfo(3) + "::OnGMTime", 99, 99;
+
+	$GR_Open = 0;
+
+	end;
+
+
+//============================================================
+// AUTOMATIC SCHEDULES
+// CHANGE THESE TIMES AS NEEDED
+//============================================================
+
+OnClock1200:
+OnClock1800:
+OnClock2100:
+	donpcevent strnpcinfo(3) + "::OnGoldOpen";
+	end;
+
+
+//============================================================
+// OPEN GOLD ROOM
+//============================================================
+
+OnGoldOpen:
+
+	if ($GR_Open)
+		end;
+
+	set $GR_Open, 1;
+	set $GR_EndTick,
+		gettimetick(2) + (.Duration * 60);
+
+	set .WarningSent, 0;
+
+	// Show entrance NPC
+	hideoffnpc "GoldRoomEntrance";
+
+	// Remove old monsters
+	killmonster "prt_fild01", "All";
+
+	// Spawn configured monsters
+	for (.@i = 0; .@i < .MobCount; .@i++) {
+		monster "prt_fild01", 0, 0,
+			"Gold Room Monster",
+			.MobIDs[.@i],
+			.MobCounts[.@i];
+	}
+
+	announce
+		"[Gold Room] The Gold Room is now OPEN! "
+		+ "Visit the entrance in Prontera!",
+		bc_all;
+
+	// Start controller timer
+	stopnpctimer;
+	initnpctimer;
+
+	end;
+
+
+//============================================================
+// TIMER - WARNING AND AUTOMATIC CLOSING
+//============================================================
+
+OnTimer1000:
+
+	if (!$GR_Open)
+		end;
+
+	set .@remaining, $GR_EndTick - gettimetick(2);
+
+	// Five-minute warning
+	if (.@remaining <= (.WarningTime * 60)
+		&& !.WarningSent) {
+
+		set .WarningSent, 1;
+
+		announce
+			"[Gold Room] WARNING! The Gold Room "
+			+ "will close in 5 minutes! Collect your "
+			+ "remaining Gold and prepare to leave!",
+			bc_all;
+	}
+
+	// Automatic closing
+	if (.@remaining <= 0) {
+		donpcevent strnpcinfo(3) + "::OnGoldClose";
+		end;
+	}
+
+	// Repeat timer
+	setnpctimer 0;
+	end;
+
+
+//============================================================
+// GOLD ROOM CLOSE
+//============================================================
+
+OnGoldClose:
+
+	if (!$GR_Open)
+		end;
+
+	set $GR_Open, 0;
+	set $GR_EndTick, 0;
+
+	// Hide entrance NPC
+	hideonnpc "GoldRoomEntrance";
+
+	// Remove remaining monsters
+	killmonster "prt_fild01", "All";
+
+	// Teleport EVERY player inside to Prontera
+	mapwarp "prt_fild01",
+		.Destination$,
+		.DestinationX,
+		.DestinationY;
+
+	announce
+		"[Gold Room] The Gold Room is now CLOSED! "
+		+ "Thank you for participating!",
+		bc_all;
+
+	stopnpctimer;
+
+	end;
+
+
+//============================================================
+// GOLD REWARD
+// Only rewards configured Gold item.
+//============================================================
+
+OnNPCKillEvent:
+
+	if (strcharinfo(3) != "prt_fild01")
+		end;
+
+	if (!$GR_Open)
+		end;
+
+	set .@reward, rand(.GoldMin, .GoldMax);
+
+	getitem .GoldItemID, .@reward;
+
+	dispbottom
+		"You received " + .@reward
+		+ " Gold from the Gold Room!";
+
+	end;
+
+
+//============================================================
+// GM COMMAND: @goldopen
+//============================================================
+
+OnGMOpen:
+
+	donpcevent strnpcinfo(3) + "::OnGoldOpen";
+
+	dispbottom "Gold Room manual opening requested.";
+
+	end;
+
+
+//============================================================
+// GM COMMAND: @goldclose
+//============================================================
+
+OnGMClose:
+
+	donpcevent strnpcinfo(3) + "::OnGoldClose";
+
+	dispbottom "Gold Room manual closing requested.";
+
+	end;
+
+
+//============================================================
+// GM COMMAND: @goldtime
+//============================================================
+
+OnGMTime:
+
+	if (!$GR_Open) {
+		dispbottom "Gold Room is currently CLOSED.";
+		end;
+	}
+
+	set .@remaining, $GR_EndTick - gettimetick(2);
+
+	if (.@remaining < 0)
+		set .@remaining, 0;
+
+	set .@minutes, .@remaining / 60;
+	set .@seconds, .@remaining % 60;
+
+	dispbottom
+		"Gold Room remaining time: "
+		+ .@minutes + " minutes "
+		+ .@seconds + " seconds.";
+
+	end;
+
+}

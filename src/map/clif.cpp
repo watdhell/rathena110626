@@ -11107,6 +11107,7 @@ void clif_parse_LoadEndAck(int32 fd,map_session_data *sd)
 			channel_mjoin(sd); //join new map
 
 		clif_pk_mode_message(sd);
+		clif_goldpc_info(*sd);
 	}
 	
 	if( sd->guild && ( battle_config.guild_notice_changemap == 2 || guild_notice ) ){
@@ -25413,6 +25414,55 @@ void clif_partybooking_ask( map_session_data* sd, map_session_data* joining_sd )
 	p.y = joining_sd->status.class_;
 
 	clif_send( &p, sizeof( p ), sd, SELF );
+#endif
+}
+
+void clif_goldpc_info(map_session_data& sd) {
+#if PACKETVER >= 20140611
+	if (!battle_config.feature_goldpc_active)
+		return;
+
+	constexpr int32 client_max_seconds = 3600;
+	PACKET_ZC_GOLDPCCAFE_POINT p = {};
+	p.PacketType = HEADER_ZC_GOLDPCCAFE_POINT;
+	p.isActive = true;
+	p.mode = battle_config.feature_goldpc_vip && pc_isvip(&sd) ? 2 : 1;
+	p.point = static_cast<int32>(pc_readparam(&sd, SP_GOLDPC_POINTS));
+
+	if (sd.goldpc_tid != INVALID_TIMER) {
+		if (const TimerData* td = get_timer(sd.goldpc_tid); td != nullptr) {
+			const t_tick remaining = DIFF_TICK(td->tick, gettick()) > 0 ? DIFF_TICK(td->tick, gettick()) : 0;
+			const int32 seconds_remaining = static_cast<int32>((remaining + 999) / 1000);
+			// The official client always renders a 60-minute bar. Report the
+			// remaining server interval against that fixed client timeline.
+			p.playedTime = client_max_seconds - (seconds_remaining > client_max_seconds ? client_max_seconds : seconds_remaining);
+		}
+	} else {
+		p.playedTime = client_max_seconds;
+	}
+
+	clif_send(&p, sizeof(p), &sd, SELF);
+#endif
+}
+
+void clif_parse_dynamic_npc(int32 fd, map_session_data* sd) {
+#if PACKETVER >= 20140430
+	const auto* p = reinterpret_cast<const PACKET_CZ_DYNAMICNPC_CREATE_REQUEST*>(RFIFOP(fd, 0));
+
+	if (strncasecmp("GOLDPCCAFE", p->name, sizeof(p->name)) != 0)
+		return;
+
+	char npcname[NAME_LENGTH + 1] = {};
+	memcpy(npcname, p->name, sizeof(p->name));
+	if (npc_data* nd = npc_name2id(npcname); nd != nullptr) {
+		// Use rAthena's fake NPC for the dialogue. It is never spawned on the
+		// map and bypasses the proximity validation on menu continuations.
+		run_script(nd->u.scr.script, 0, sd->id, fake_nd->id);
+		clif_dynamicnpc_result(*sd, DYNAMICNPC_RESULT_SUCCESS);
+	} else {
+		ShowError("clif_parse_dynamic_npc: Original NPC \"%s\" was not found.\n", npcname);
+		clif_dynamicnpc_result(*sd, DYNAMICNPC_RESULT_UNKNOWNNPC);
+	}
 #endif
 }
 

@@ -1,0 +1,632 @@
+//============================================================
+// rAthena Auto-Play Configuration
+//============================================================
+
+-	script	AutoPlay_Config	-1,{
+
+OnInit:
+	// Activation item
+	.ItemID = 50000;
+
+	// Duration
+	.DefaultDuration = 60;
+	.MinimumDuration = 5;
+	.MaximumDuration = 1440;
+
+	// Automation intervals (milliseconds)
+	.AttackInterval = 1000;
+	.FollowInterval = 1500;
+	.BuffInterval = 10000;
+
+	// Monster search
+	.DefaultRadius = 9;
+	.MaximumRadius = 14;
+	.MaximumMonsterSlots = 8;
+
+	// Buff configuration
+	.MaximumBuffSlots = 5;
+
+	// Access
+	.GMLevel = 90;
+
+	// Safety
+	.DisablePvP = 1;
+	.DisableWoE = 1;
+	.DisableBattleground = 1;
+	.StopOnDeath = 1;
+	.StopOnLogout = 1;
+	.StopOnMapChange = 0;
+
+	// Set to 1 to require a monster whitelist.
+	.RequireWhitelist = 0;
+
+	// System switch
+	.Enabled = 1;
+
+	end;
+}
+
+
+//============================================================
+// rAthena Auto-Play System
+// Auto Attack / Auto Follow / Auto Buff
+//============================================================
+
+-	script	AutoPlay_Main	-1,{
+
+OnInit:
+	bindatcmd "autoplay",strnpcinfo(3)+"::OnAtcommand",0,0;
+	bindatcmd "autostop",strnpcinfo(3)+"::OnStopCommand",0,0;
+	end;
+
+
+//============================================================
+// ATCOMMAND
+//============================================================
+
+OnAtcommand:
+	if (!getvariableofnpc(.Enabled,"AutoPlay_Config")) {
+		dispbottom "[Auto-Play] System is disabled.";
+		end;
+	}
+
+	if (.@atcmd_numparameters < 1) {
+		callsub S_Menu;
+		end;
+	}
+
+	switch (.@atcmd_parameters$[0]) {
+
+	case "start":
+		callfunc "F_AP_Start",
+			getvariableofnpc(.DefaultDuration,"AutoPlay_Config");
+		end;
+
+	case "stop":
+		callsub S_Stop;
+		end;
+
+	case "settings":
+		callsub S_Menu;
+		end;
+
+	case "status":
+		callsub S_Status;
+		end;
+
+	case "help":
+		dispbottom "Commands:";
+		dispbottom "@autoplay start";
+		dispbottom "@autoplay stop";
+		dispbottom "@autoplay settings";
+		dispbottom "@autoplay status";
+		end;
+
+	default:
+		dispbottom "Invalid command. Use @autoplay help.";
+		end;
+	}
+
+
+//============================================================
+// STOP COMMAND
+//============================================================
+
+OnStopCommand:
+	callsub S_Stop;
+	end;
+
+S_Stop:
+	if (!#AP_Active) {
+		dispbottom "[Auto-Play] You are not using Auto-Play.";
+		return;
+	}
+
+	#AP_Active = 0;
+	#AP_EndTime = 0;
+
+	unitstopattack getcharid(3);
+	unitstopwalk getcharid(3);
+
+	dispbottom "[Auto-Play] Automation stopped.";
+	return;
+
+
+//============================================================
+// MAIN MENU
+//============================================================
+
+S_Menu:
+	mes "[Auto-Play System]";
+	mes "Configure your automation.";
+	mes " ";
+	mes "Attack: "+(#AP_Attack ? "^00AA00ON^000000":"^FF0000OFF^000000");
+	mes "Follow: "+(#AP_Follow ? "^00AA00ON^000000":"^FF0000OFF^000000");
+	mes "Buff: "+(#AP_Buff ? "^00AA00ON^000000":"^FF0000OFF^000000");
+	mes " ";
+
+	switch(select(
+		"Activate Auto-Play",
+		"Auto Attack Settings",
+		"Auto Follow Settings",
+		"Auto Buff Settings",
+		"Monster Target Settings",
+		"Set Duration",
+		"Stop Auto-Play",
+		"Close"
+	)) {
+
+	case 1:
+		callfunc "F_AP_Start",
+			getvariableofnpc(.DefaultDuration,"AutoPlay_Config");
+		close;
+
+	case 2:
+		callsub S_AttackSettings;
+		close;
+
+	case 3:
+		callsub S_FollowSettings;
+		close;
+
+	case 4:
+		callsub S_BuffSettings;
+		close;
+
+	case 5:
+		callsub S_MobSettings;
+		close;
+
+	case 6:
+		mes "[Duration]";
+		mes "Enter duration in minutes.";
+		input .@duration;
+
+		if (.@duration < getvariableofnpc(.MinimumDuration,"AutoPlay_Config") ||
+		    .@duration > getvariableofnpc(.MaximumDuration,"AutoPlay_Config")) {
+			mes "Invalid duration.";
+			close;
+		}
+
+		#AP_Duration = .@duration;
+		mes "Duration saved.";
+		close;
+
+	case 7:
+		callsub S_Stop;
+		close;
+
+	default:
+		close;
+	}
+
+
+//============================================================
+// ATTACK SETTINGS
+//============================================================
+
+S_AttackSettings:
+	mes "[Auto Attack]";
+	switch(select("Enable/Disable Attack:Set Attack Radius:Back")) {
+
+	case 1:
+		#AP_Attack = !#AP_Attack;
+		mes "Auto Attack: "+(#AP_Attack ? "Enabled":"Disabled");
+		close;
+
+	case 2:
+		mes "Enter attack radius.";
+		input .@radius;
+
+		if (.@radius < 1 ||
+		    .@radius > getvariableofnpc(.MaximumRadius,"AutoPlay_Config")) {
+			mes "Invalid radius.";
+			close;
+		}
+
+		#AP_Radius = .@radius;
+		mes "Attack radius saved.";
+		close;
+
+	default:
+		return;
+	}
+
+
+//============================================================
+// FOLLOW SETTINGS
+//============================================================
+
+S_FollowSettings:
+	mes "[Auto Follow]";
+	mes "Current target: "+#AP_FollowName$;
+	next;
+
+	switch(select("Set Follow Target:Enable/Disable Follow:Back")) {
+
+	case 1:
+		mes "Enter the exact character name.";
+		input .@name$;
+
+		if (.@name$ == strcharinfo(0)) {
+			mes "You cannot follow yourself.";
+			close;
+		}
+
+		#AP_FollowName$ = .@name$;
+		mes "Follow target saved.";
+		close;
+
+	case 2:
+		#AP_Follow = !#AP_Follow;
+		mes "Auto Follow: "+(#AP_Follow ? "Enabled":"Disabled");
+		close;
+
+	default:
+		return;
+	}
+
+
+//============================================================
+// BUFF SETTINGS
+//============================================================
+
+S_BuffSettings:
+	mes "[Auto Buff]";
+	mes "Configure up to 5 skills.";
+	next;
+
+	switch(select(
+		"Configure Buff Slot 1",
+		"Configure Buff Slot 2",
+		"Configure Buff Slot 3",
+		"Configure Buff Slot 4",
+		"Configure Buff Slot 5",
+		"Enable/Disable Auto Buff",
+		"Back"
+	)) {
+
+	case 1: .@slot = 1; break;
+	case 2: .@slot = 2; break;
+	case 3: .@slot = 3; break;
+	case 4: .@slot = 4; break;
+	case 5: .@slot = 5; break;
+
+	case 6:
+		#AP_Buff = !#AP_Buff;
+		mes "Auto Buff: "+(#AP_Buff ? "Enabled":"Disabled");
+		close;
+
+	default:
+		return;
+	}
+
+	mes "Enter skill ID.";
+	input .@skill;
+
+	mes "Enter skill level.";
+	input .@level;
+
+	if (.@skill < 1 || .@level < 1 || .@level > 10) {
+		mes "Invalid skill configuration.";
+		close;
+	}
+
+	setd "#AP_BuffSkill"+.@slot,.@skill;
+	setd "#AP_BuffLevel"+.@slot,.@level;
+
+	mes "Buff slot "+.@slot+" saved.";
+	close;
+
+
+//============================================================
+// MONSTER SETTINGS
+//============================================================
+
+S_MobSettings:
+	mes "[Monster Target Settings]";
+	mes "Configure up to 8 monster IDs.";
+	next;
+
+	switch(select(
+		"Configure Whitelist",
+		"Configure Blacklist",
+		"Enable Required Whitelist",
+		"Back"
+	)) {
+
+	case 1:
+		.@mode = 1;
+		break;
+
+	case 2:
+		.@mode = 2;
+		break;
+
+	case 3:
+		#AP_RequireWhitelist = !#AP_RequireWhitelist;
+		mes "Required whitelist: "+(#AP_RequireWhitelist ? "ON":"OFF");
+		close;
+
+	default:
+		return;
+	}
+
+	mes "Select monster slot (1-8).";
+	input .@slot;
+
+	if (.@slot < 1 || .@slot > 8) {
+		mes "Invalid slot.";
+		close;
+	}
+
+	mes "Enter monster ID.";
+	mes "Enter 0 to clear this slot.";
+	input .@mob;
+
+	if (.@mob < 0 || .@mob > 65535) {
+		mes "Invalid monster ID.";
+		close;
+	}
+
+	if (.@mode == 1)
+		setd "#AP_White"+.@slot,.@mob;
+	else
+		setd "#AP_Black"+.@slot,.@mob;
+
+	mes "Monster configuration saved.";
+	close;
+
+
+//============================================================
+// STATUS
+//============================================================
+
+S_Status:
+	mes "[Auto-Play Status]";
+	mes "Active: "+(#AP_Active ? "Yes":"No");
+	mes "Attack: "+(#AP_Attack ? "ON":"OFF");
+	mes "Follow: "+(#AP_Follow ? "ON":"OFF");
+	mes "Buff: "+(#AP_Buff ? "ON":"OFF");
+
+	if (#AP_Active)
+		mes "Remaining seconds: "+(#AP_EndTime-gettimetick(2));
+
+	close;
+
+
+//============================================================
+// AUTOMATION TIMER
+//============================================================
+
+OnPulse:
+// Auto Buff
+if (#AP_Buff && gettimetick(2) >= #AP_NextBuff) {
+
+	for (.@i = 1; .@i <= 5; .@i++) {
+
+		.@skill = getd("#AP_BuffSkill"+.@i);
+		.@level = getd("#AP_BuffLevel"+.@i);
+
+		if (.@skill > 0 && .@level > 0) {
+			unitskilluseid getcharid(3),
+				.@skill,.@level,getcharid(3);
+		}
+	}
+
+	#AP_NextBuff = gettimetick(2) +
+		(getvariableofnpc(.BuffInterval,"AutoPlay_Config") / 1000);
+}
+	}
+
+	// Attack nearby monsters
+	if (#AP_Attack) {
+		.@radius = #AP_Radius;
+
+		if (.@radius < 1)
+			.@radius = getvariableofnpc(.DefaultRadius,"AutoPlay_Config");
+
+		.@count = getareaunits(
+			BL_MOB,.@map$,
+			.@x+.@radius,.@y+.@radius,
+			.@x-.@radius,.@y-.@radius,
+			.@units[0]
+		);
+
+		for (.@i = 0; .@i < .@count; .@i++) {
+
+			.@gid = .@units[.@i];
+			getunitdata .@gid,.@mobdata;
+
+			.@mobid = .@mobdata[UMOB_CLASS];
+
+			.@allowed = 1;
+			.@whitelist = 0;
+
+			// Check whitelist
+			for (.@j = 1; .@j <= 8; .@j++) {
+				.@id = getd("#AP_White"+.@j);
+
+				if (.@id == .@mobid)
+					.@whitelist = 1;
+			}
+
+			if (#AP_RequireWhitelist && !.@whitelist)
+				.@allowed = 0;
+
+			// Check blacklist
+			for (.@j = 1; .@j <= 8; .@j++) {
+				.@id = getd("#AP_Black"+.@j);
+
+				if (.@id > 0 && .@id == .@mobid)
+					.@allowed = 0;
+			}
+
+			if (.@allowed)
+				unitattack getcharid(3),.@gid,1;
+		}
+	}
+
+	// Auto Buff
+	if (#AP_Buff) {
+		for (.@i = 1; .@i <= 5; .@i++) {
+
+			.@skill = getd("#AP_BuffSkill"+.@i);
+			.@level = getd("#AP_BuffLevel"+.@i);
+
+			if (.@skill > 0 && .@level > 0)
+				unitskilluseid getcharid(3),.@skill,.@level,getcharid(3);
+		}
+	}
+
+	addtimer 1000,strnpcinfo(3)+"::OnPulse";
+	end;
+
+
+//============================================================
+// FUNCTION: START AUTO-PLAY
+//============================================================
+
+}
+
+function	script	F_AP_Start	{
+
+	.@duration = getarg(0);
+
+	if (!getvariableofnpc(.Enabled,"AutoPlay_Config")) {
+		dispbottom "[Auto-Play] Disabled by administrator.";
+		return;
+	}
+
+	if (.@duration <= 0 ||
+	    .@duration > getvariableofnpc(.MaximumDuration,"AutoPlay_Config")) {
+		dispbottom "[Auto-Play] Invalid duration.";
+		return;
+	}
+
+	if (#AP_Active) {
+		dispbottom "[Auto-Play] Already active.";
+		return;
+	}
+
+	// Initialize defaults
+	if (#AP_Duration <= 0)
+		#AP_Duration = .@duration;
+
+	if (#AP_Radius <= 0)
+		#AP_Radius = getvariableofnpc(.DefaultRadius,"AutoPlay_Config");
+
+	if (#AP_Attack == 0 && #AP_Follow == 0 && #AP_Buff == 0) {
+		#AP_Attack = 1;
+		#AP_Buff = 1;
+	}
+
+	#AP_Active = 1;
+	#AP_EndTime = gettimetick(2) + (#AP_Duration * 60);
+
+	addtimer 1000,"AutoPlay_Main::OnPulse";
+
+	dispbottom "[Auto-Play] Activated.";
+	dispbottom "[Auto-Play] Duration: "+#AP_Duration+" minutes.";
+
+	return;
+	
+//============================================================
+// LOGOUT CLEANUP
+//============================================================
+
+OnPCLogoutEvent:
+	#AP_Active = 0;
+	#AP_EndTime = 0;
+	#AP_NextBuff = 0;
+	end;
+
+
+//============================================================
+// DEATH CLEANUP
+//============================================================
+
+OnPCDieEvent:
+	if (getvariableofnpc(.StopOnDeath,"AutoPlay_Config")) {
+		#AP_Active = 0;
+		#AP_EndTime = 0;
+		unitstopattack getcharid(3);
+		unitstopwalk getcharid(3);
+		dispbottom "[Auto-Play] Stopped because you died.";
+	}
+	end;
+
+//============================================================
+// GM COMMAND
+//============================================================
+
+OnInit:
+	bindatcmd "autoplayadmin",strnpcinfo(3)+"::OnGMAdmin",90,90;
+	end;
+
+OnGMAdmin:
+
+	if (getgroupid() < getvariableofnpc(.GMLevel,"AutoPlay_Config")) {
+		dispbottom "Access denied.";
+		end;
+	}
+
+	mes "[Auto-Play Administrator]";
+	mes "System status: "+
+		(getvariableofnpc(.Enabled,"AutoPlay_Config") ? "Enabled":"Disabled");
+	next;
+
+	switch(select(
+		"Enable System",
+		"Disable System",
+		"Change Default Duration",
+		"Change Maximum Duration",
+		"Stop My Auto-Play",
+		"Close"
+	)) {
+
+	case 1:
+		set getvariableofnpc(.Enabled,"AutoPlay_Config"),1;
+		mes "Auto-Play enabled.";
+		close;
+
+	case 2:
+		set getvariableofnpc(.Enabled,"AutoPlay_Config"),0;
+		mes "Auto-Play disabled for new activations.";
+		mes "Existing sessions will need to be stopped separately.";
+		close;
+
+	case 3:
+		mes "Enter default duration in minutes.";
+		input .@duration;
+
+		if (.@duration < 1 || .@duration > 1440) {
+			mes "Invalid duration.";
+			close;
+		}
+
+		set getvariableofnpc(.DefaultDuration,"AutoPlay_Config"),.@duration;
+		mes "Default duration changed.";
+		close;
+
+	case 4:
+		mes "Enter maximum duration in minutes.";
+		input .@duration;
+
+		if (.@duration < 5 || .@duration > 1440) {
+			mes "Invalid duration.";
+			close;
+		}
+
+		set getvariableofnpc(.MaximumDuration,"AutoPlay_Config"),.@duration;
+		mes "Maximum duration changed.";
+		close;
+
+	case 5:
+		callsub S_Stop;
+		close;
+
+	default:
+		close;
+	}
+}

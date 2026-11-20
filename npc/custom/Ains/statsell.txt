@@ -1,0 +1,353 @@
+
+	// ==========================================
+	// SSQL COMMANDS
+	// ==========================================
+//Latest purchases:
+//SELECT *
+//FROM statshop_logs
+//ORDER BY purchased_at DESC
+//LIMIT 100;
+
+//Purchases grouped by character:
+//SELECT char_name, stat_name,
+//       COUNT(*) AS purchases,
+//       SUM(cost_amount) AS total_cost
+//FROM statshop_logs
+//GROUP BY char_id, stat_name;
+
+//VIP purchase history:
+//SELECT *
+//FROM statshop_logs
+//WHERE is_vip = 1
+//ORDER BY purchased_at DESC;
+
+//Daily purchase statistics:
+//SELECT purchase_date,
+//       COUNT(*) AS total_purchases,
+//       SUM(cost_amount) AS total_items_spent
+//FROM statshop_logs
+//GROUP BY purchase_date
+//ORDER BY purchase_date DESC;
+
+/*
+
+CREATE TABLE IF NOT EXISTS `statshop_logs` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `account_id` INT UNSIGNED NOT NULL,
+    `char_id` INT UNSIGNED NOT NULL,
+    `char_name` VARCHAR(30) NOT NULL,
+    `stat_name` VARCHAR(10) NOT NULL,
+    `stat_before` INT NOT NULL,
+    `stat_after` INT NOT NULL,
+    `stat_amount` INT NOT NULL,
+    `cost_item_id` INT UNSIGNED NOT NULL,
+    `cost_amount` INT UNSIGNED NOT NULL,
+    `is_vip` TINYINT(1) NOT NULL DEFAULT 0,
+    `gm_bypass` TINYINT(1) NOT NULL DEFAULT 0,
+    `purchase_date` DATE NOT NULL,
+    `purchased_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`id`),
+    INDEX `idx_account_daily` (`account_id`, `purchase_date`),
+    INDEX `idx_character` (`char_id`),
+    INDEX `idx_purchase_date` (`purchased_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+*/
+
+
+// ==========================================
+// Feature							Implementation
+// ==========================================
+// ==========================================
+// Stat upgrade					+10 STR, AGI, VIT, INT, DEX, or LUK
+// Normal pricing				Configurable item ID and quantity
+// VIP pricing					Separate configurable item cost
+// Daily purchase limit			Separate VIP and normal limits
+// Maximum stat					Configurable: 99, 120, 130, 150, etc.
+// GM bypass					Bypass daily limits
+// Purchase logs				Character, account, stat, quantity, cost, timestamp
+// SQL history					Persistent database records
+// Configuration				Separate configuration file
+// Validation					Stat cap, inventory, and transaction checks
+// ==========================================
+// ==========================================
+
+-	script	StatShopConfig	-1,{
+
+OnInit:
+	// ==========================================
+	// GENERAL SETTINGS
+	// ==========================================
+
+	.MaxStat = 1000;       // Maximum base stat
+	.StatIncrease = 10;   // Points per purchase
+
+	// ==========================================
+	// NORMAL PLAYER PRICING
+	// ==========================================
+
+	.NormalItem = 607;    // Required item ID
+	.NormalCost = 10;     // Required quantity
+
+	// Daily purchase transactions
+	.NormalDailyLimit = 3;
+
+	// ==========================================
+	// VIP PLAYER PRICING
+	// ==========================================
+
+	.VipGroupID = 5;      // VIP group ID in groups.conf
+
+	.VipItem = 607;       // VIP payment item ID
+	.VipCost = 5;         // VIP quantity (discount)
+
+	.VipDailyLimit = 5;
+
+	// ==========================================
+	// GM SETTINGS
+	// ==========================================
+
+	.GMBypassLevel = 80;  // GM level that bypasses daily limit
+
+	// ==========================================
+	// SQL TABLE
+	// ==========================================
+
+	.LogTable$ = "statshop_logs";
+
+	end;
+}
+
+
+//==============================================================
+// rAthena Stat Upgrade Shop
+// +10 Permanent Base Stats
+// VIP Pricing / Daily Limits / GM Bypass
+// SQL Purchase Logging
+//==============================================================
+
+aegis,84,72,4	script	Stat Upgrade Shop	4_F_KAFRA1,{
+
+	mes "[Stat Upgrade Shop]";
+	mes "Welcome to the Stat Upgrade Shop!";
+	mes " ";
+	mes "I can permanently increase";
+	mes "one of your six base stats by ^0000FF10 points^000000.";
+	next;
+
+	.@vipgroup = getvariableofnpc(.VipGroupID,"StatShopConfig");
+	.@gmlevel = getvariableofnpc(.GMBypassLevel,"StatShopConfig");
+
+	.@isvip = (getgroupid() == .@vipgroup);
+	.@isgm = (getgmlevel() >= .@gmlevel);
+
+	.@increase = getvariableofnpc(.StatIncrease,"StatShopConfig");
+	.@maxstat = getvariableofnpc(.MaxStat,"StatShopConfig");
+
+	if (.@isvip) {
+		.@item = getvariableofnpc(.VipItem,"StatShopConfig");
+		.@cost = getvariableofnpc(.VipCost,"StatShopConfig");
+		.@limit = getvariableofnpc(.VipDailyLimit,"StatShopConfig");
+	} else {
+		.@item = getvariableofnpc(.NormalItem,"StatShopConfig");
+		.@cost = getvariableofnpc(.NormalCost,"StatShopConfig");
+		.@limit = getvariableofnpc(.NormalDailyLimit,"StatShopConfig");
+	}
+
+	if (.@isgm)
+		mes "^FF0000GM DAILY LIMIT BYPASS ACTIVE^000000";
+	else if (.@isvip)
+		mes "^0000FFVIP DISCOUNT ACTIVE^000000";
+	else
+		mes "Standard player pricing applies.";
+
+	mes " ";
+    mes "Maximum base stat: ^FF0000"+.@maxstat;
+    mes "Upgrade amount: + ^FF0000"+.@increase;
+    mes "Cost: "+.@cost+"x ^FF0000"+getitemname(.@item);
+    mes "Daily limit: ^FF0000"+.@limit;
+    next;
+
+	mes "[Stat Upgrade Shop]";
+	mes "Which stat would you like to upgrade?";
+	next;
+
+	switch(select(
+		"Strength (STR)",
+		"Agility (AGI)",
+		"Vitality (VIT)",
+		"Intelligence (INT)",
+		"Dexterity (DEX)",
+		"Luck (LUK)",
+		"Cancel"
+	)) {
+		case 1:
+			.@stat = bStr;
+			.@statname$ = "STR";
+			break;
+		case 2:
+			.@stat = bAgi;
+			.@statname$ = "AGI";
+			break;
+		case 3:
+			.@stat = bVit;
+			.@statname$ = "VIT";
+			break;
+		case 4:
+			.@stat = bInt;
+			.@statname$ = "INT";
+			break;
+		case 5:
+			.@stat = bDex;
+			.@statname$ = "DEX";
+			break;
+		case 6:
+			.@stat = bLuk;
+			.@statname$ = "LUK";
+			break;
+		default:
+			close;
+	}
+
+	.@before = readparam(.@stat);
+
+	// Check maximum stat.
+	if (.@before + .@increase > .@maxstat) {
+		mes "[Stat Upgrade Shop]";
+		mes "Your "+.@statname$+" is currently "+.@before+".";
+		mes "You cannot exceed the maximum stat of "+.@maxstat+".";
+		close;
+	}
+
+	// Check daily purchase limit.
+	if (!.@isgm) {
+		query_sql(
+			"SELECT COUNT(*) FROM `statshop_logs` "+
+			"WHERE `account_id` = "+getcharid(3)+
+			" AND `purchase_date` = CURDATE()"+
+			" AND `gm_bypass` = 0",
+			.@purchases
+		);
+
+		if (.@purchases >= .@limit) {
+			mes "[Stat Upgrade Shop]";
+			mes "You have reached your daily purchase limit.";
+			mes " ";
+			mes "Purchases today: "+.@purchases;
+			mes "Daily limit: "+.@limit;
+			close;
+		}
+	}
+
+	// Check payment items.
+	if (countitem(.@item) < .@cost) {
+		mes "[Stat Upgrade Shop]";
+		mes "You don't have enough payment items.";
+		mes " ";
+		mes "Required: "+.@cost+"x "+getitemname(.@item);
+		close;
+	}
+
+	// Confirmation.
+	mes "[Stat Upgrade Shop]";
+	mes "Purchase confirmation:";
+	mes " ";
+	mes "Stat: "+.@statname$;
+	mes "Current: "+.@before;
+	mes "After purchase: "+(.@before + .@increase);
+	mes " ";
+	mes "Payment: "+.@cost+"x "+getitemname(.@item);
+	next;
+
+	if (select("Confirm Purchase:Cancel") != 1)
+		close;
+
+	// Revalidate inventory and stat before charging.
+	if (countitem(.@item) < .@cost)
+		close;
+
+	.@before = readparam(.@stat);
+
+	if (.@before + .@increase > .@maxstat) {
+		mes "[Stat Upgrade Shop]";
+		mes "Your stat has changed.";
+		mes "Purchase cancelled.";
+		close;
+	}
+
+	// Revalidate daily limit.
+	if (!.@isgm) {
+		query_sql(
+			"SELECT COUNT(*) FROM `statshop_logs` "+
+			"WHERE `account_id` = "+getcharid(3)+
+			" AND `purchase_date` = CURDATE()"+
+			" AND `gm_bypass` = 0",
+			.@purchases
+		);
+
+		if (.@purchases >= .@limit) {
+			mes "Daily purchase limit reached.";
+			close;
+		}
+	}
+
+	// Remove payment.
+	delitem .@item,.@cost;
+
+	// Permanently increase base stat without using status points.
+	statusup2 .@stat,.@increase;
+
+	.@after = readparam(.@stat);
+
+	// Verify successful stat increase.
+	if (.@after != .@before + .@increase) {
+
+		// Roll back partial increase if needed.
+		if (.@after > .@before)
+			statusup2 .@stat,.@before - .@after;
+
+		// Refund payment.
+		getitem .@item,.@cost;
+
+		mes "[Stat Upgrade Shop]";
+		mes "The stat upgrade could not be completed.";
+		mes "Your payment has been refunded.";
+		close;
+	}
+
+	// Log successful purchase.
+	.@vipflag = .@isvip;
+	.@gmflag = .@isgm;
+
+	query_sql(
+		"INSERT INTO `statshop_logs` "+
+		"(`account_id`,`char_id`,`char_name`,`stat_name`,"+
+		"`stat_before`,`stat_after`,`stat_amount`,"+
+		"`cost_item_id`,`cost_amount`,`is_vip`,`gm_bypass`,"+
+		"`purchase_date`,`purchased_at`) VALUES ("+
+		getcharid(3)+","+
+		getcharid(0)+","+
+		"'"+escape_sql(strcharinfo(0))+"',"+
+		"'"+.@statname$+"',"+
+		.@before+","+
+		.@after+","+
+		.@increase+","+
+		.@item+","+
+		.@cost+","+
+		.@vipflag+","+
+		.@gmflag+","+
+		"CURDATE(),NOW())"
+	);
+
+	mes "[Stat Upgrade Shop]";
+	mes "^00AA00PURCHASE SUCCESSFUL!^000000";
+	mes " ";
+	mes "Stat: "+.@statname$;
+	mes "Previous: "+.@before;
+	mes "Current: "+.@after;
+	mes " ";
+	mes "Your permanent stat has increased!";
+	specialeffect2 EF_BLESSING;
+	close;
+}

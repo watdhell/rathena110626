@@ -2126,6 +2126,7 @@ bool pc_authok(map_session_data *sd, uint32 login_id2, time_t expiration_time, i
 	sd->autotrade_tid = INVALID_TIMER;
 	sd->respawn_tid = INVALID_TIMER;
 	sd->tid_queue_active = INVALID_TIMER;
+	sd->goldpc_tid = INVALID_TIMER;
 	sd->macro_detect.timer = INVALID_TIMER;
 
 	sd->skill_keep_using.tid = INVALID_TIMER;
@@ -2346,6 +2347,25 @@ bool pc_set_hate_mob(map_session_data *sd, int32 pos, block_list *bl)
 	return true;
 }
 
+TIMER_FUNC(pc_goldpc_update) {
+	map_session_data* sd = map_id2sd(id);
+
+	if (sd == nullptr)
+		return 0;
+
+	sd->goldpc_tid = INVALID_TIMER;
+	if (!battle_config.feature_goldpc_active || sd->state.autotrade)
+		return 0;
+
+	const int64 points = pc_readparam(sd, SP_GOLDPC_POINTS);
+	if (points >= battle_config.feature_goldpc_max_points)
+		return 0;
+
+	pc_setreg2(sd, GOLDPC_SECONDS_VAR, 0);
+	pc_setparam(sd, SP_GOLDPC_POINTS, points + (battle_config.feature_goldpc_vip && pc_isvip(sd) ? 2 : 1));
+	return 0;
+}
+
 /*==========================================
  * Invoked once after the char/account/account2 registry variables are received. [Skotlex]
  * We didn't receive item information at this point so DO NOT attempt to do item operations here.
@@ -2452,6 +2472,17 @@ void pc_reg_received(map_session_data *sd)
 #if !( PACKETVER_MAIN_NUM >= 20190403 || PACKETVER_RE_NUM >= 20190320 || PACKETVER_ZERO_NUM >= 20190410 )
 	// Before those clients you could send out the instance info even when the client was still loading the map, afterwards you need to send it later
 	clif_instance_info( *sd );
+#endif
+
+	if (battle_config.feature_goldpc_active && pc_readreg2(sd, GOLDPC_POINT_VAR) < battle_config.feature_goldpc_max_points && !sd->state.autotrade) {
+		const int32 elapsed = static_cast<int32>(cap_value(pc_readreg2(sd, GOLDPC_SECONDS_VAR), 0, battle_config.feature_goldpc_time));
+		sd->goldpc_tid = add_timer(gettick() + (battle_config.feature_goldpc_time - elapsed) * 1000, pc_goldpc_update, sd->id, 0);
+	} else {
+		sd->goldpc_tid = INVALID_TIMER;
+	}
+
+#ifndef VIP_ENABLE
+	clif_goldpc_info(*sd);
 #endif
 
 	// pet
@@ -10262,6 +10293,7 @@ int64 pc_readparam( const map_session_data* sd, int64 type )
 		case SP_PCDIECOUNTER:    val = sd->die_counter; break;
 		case SP_COOKMASTERY:     val = sd->cook_mastery; break;
 		case SP_ACHIEVEMENT_LEVEL: val = sd->achievement_data.level; break;
+		case SP_GOLDPC_POINTS: val = pc_readreg2(sd, GOLDPC_POINT_VAR); break;
 		case SP_CRITICAL:        val = sd->battle_status.cri/10; break;
 		case SP_ASPD:            val = (AMOTION_ZERO_ASPD-sd->battle_status.amotion)/AMOTION_INTERVAL; break;
 		case SP_BASE_ATK:
@@ -10647,6 +10679,33 @@ bool pc_setparam(map_session_data *sd,int64 type,int64 val_tmp)
 		val = cap_value(val, 0, 1999);
 		sd->cook_mastery = val;
 		pc_setglobalreg(sd, add_str(COOKMASTERY_VAR), sd->cook_mastery);
+		return true;
+	case SP_GOLDPC_POINTS:
+		val = cap_value(val, 0, battle_config.feature_goldpc_max_points);
+		pc_setreg2(sd, GOLDPC_POINT_VAR, val);
+
+		if (!sd->state.connect_new) {
+			if (sd->goldpc_tid != INVALID_TIMER) {
+				// Preserve the elapsed part of the current period. This is needed
+				// when scripts spend or grant Gold PC points while the timer runs.
+				if (const TimerData* td = get_timer(sd->goldpc_tid); td != nullptr) {
+					const t_tick remaining = DIFF_TICK(td->tick, gettick()) > 0 ? DIFF_TICK(td->tick, gettick()) : 0;
+					int32 elapsed = battle_config.feature_goldpc_time - static_cast<int32>((remaining + 999) / 1000);
+					elapsed = elapsed < 0 ? 0 : (elapsed > battle_config.feature_goldpc_time ? battle_config.feature_goldpc_time : elapsed);
+					pc_setreg2(sd, GOLDPC_SECONDS_VAR, elapsed);
+				}
+
+				delete_timer(sd->goldpc_tid, pc_goldpc_update);
+				sd->goldpc_tid = INVALID_TIMER;
+			}
+
+			if (battle_config.feature_goldpc_active && val < battle_config.feature_goldpc_max_points && !sd->state.autotrade) {
+				const int32 elapsed = static_cast<int32>(cap_value(pc_readreg2(sd, GOLDPC_SECONDS_VAR), 0, battle_config.feature_goldpc_time));
+				sd->goldpc_tid = add_timer(gettick() + (battle_config.feature_goldpc_time - elapsed) * 1000, pc_goldpc_update, sd->id, 0);
+			}
+
+			clif_goldpc_info(*sd);
+		}
 		return true;
 	default:
 		ShowError("pc_setparam: Attempted to set unknown parameter '%lld'.\n", type);
@@ -16140,7 +16199,8 @@ void do_init_pc(void) {
 	add_timer_func_list(pc_autotrade_timer, "pc_autotrade_timer");
 	add_timer_func_list(pc_on_expire_active, "pc_on_expire_active");
 	add_timer_func_list(pc_macro_detector_timeout, "pc_macro_detector_timeout");
-
+	add_timer_func_list(pc_goldpc_update, "pc_goldpc_update");
+	
 	add_timer(gettick() + autosave_interval, pc_autosave, 0, 0);
 
 	// 0=day, 1=night [Yor]

@@ -1,0 +1,64 @@
+aegis_guild,27,19,4	script	Freebies	832,{
+	mes "[Freebies NPC]";
+	mes "Welcome to Server Name!!";
+	if ( #NewbieGift > 0 ) goto Recieved;
+	mes "Here's your freebies!";
+	getitem 12214,5;
+	getitem 12210,5;
+	getitem 12263,5;
+	getitem 5826,5;
+	getitem 569,30;
+	getitem 12323,20;	
+	set #NewbieGift, 1;	
+	next;
+	mes "Please select your class specific freebies that you want to get:";
+		switch(select("Swordsman:Archer:Mage:Acolyte:Merchant:Thief")) {
+			case 1:
+				mes "[Freebies NPC]";
+				mes "Here's your freebies for Swordsman class";
+				getitem 13945,1;
+				goto Message1;
+				end;
+			case 2:
+				mes "[Freebies NPC]";
+				mes "Here's your freebies for Archer class";
+				getitem 13948,1;
+				goto Message1;
+				end;	
+			case 3:
+				mes "[Freebies NPC]";
+				mes "Here's your freebies for Mage class";
+				getitem 13946,1;
+				goto Message1;
+				end;
+			case 4:
+				mes "[Freebies NPC]";
+				mes "Here's your freebies for Acolyte class";
+				getitem 13947,1;
+				goto Message1;
+				end;
+			case 5:
+				mes "[Freebies NPC]";
+				mes "Here's your freebies for Merchant class";
+				getitem 13949,1;
+				goto Message1;
+				end;
+			case 6:
+				mes "[Freebies NPC]";
+				mes "Here's your freebies for Thief class";
+				getitem 13950,1;
+				goto Message1;
+				end;
+				}
+	
+	Message1:
+	mes "[Freebies NPC]";
+	mes "Start your awesome journey today.";
+	mes "If you need help. Please use @request / search for Game Staffs. Thank You.";
+	close;
+	
+	Recieved:
+	mes "[Freebies NPC]";
+	mes "You already recieved a freebies.";
+	close;
+	}

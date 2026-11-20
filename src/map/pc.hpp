@@ -64,7 +64,12 @@ class MapGuild;
 #define ATTENDANCE_DATE_VAR "#AttendanceDate"
 #define ATTENDANCE_COUNT_VAR "#AttendanceCounter"
 #define ACHIEVEMENTLEVEL "AchievementLevel"
-
+#ifndef GOLDPC_POINT_VAR
+#define GOLDPC_POINT_VAR "Goldpc_Points"
+#endif
+#ifndef GOLDPC_SECONDS_VAR
+#define GOLDPC_SECONDS_VAR "Goldpc_Seconds"
+#endif
 //Total number of classes (for data storage)
 #define CLASS_COUNT (JOB_MAX - JOB_NOVICE_HIGH + JOB_MAX_BASIC)
 
@@ -832,6 +837,7 @@ public:
 	// Battlegrounds queue system [MasterOfMuppets]
 	int32 bg_id, bg_queue_id;
 	int32 tid_queue_active; ///< Timer ID associated with players joining an active BG
+	int32 goldpc_tid; ///< Timer ID for the next Gold PC Cafe reward.
 
 #ifdef SECURE_NPCTIMEOUT
 	/**
@@ -1790,6 +1796,8 @@ void pc_macro_detector_disconnect(map_session_data &sd);
 // Macro Reporter
 void pc_macro_reporter_area_select(map_session_data &sd, const int16 x, const int16 y, const int8 radius);
 void pc_macro_reporter_process(map_session_data &sd, int32 reporter_account_id = -1);
+
+TIMER_FUNC(pc_goldpc_update);
 
 #ifdef MAP_GENERATOR
 void pc_reputation_generate();

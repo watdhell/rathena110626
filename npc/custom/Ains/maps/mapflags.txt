@@ -1,0 +1,33 @@
+//===== rAthena Script =======================================
+//= Map Flags for Aegis Town
+//===== By: ======================================================
+//= wrywndp (https://www.youtube.com/@wrywndp)
+//===== Description: =========================================
+//= Map flags for Aegis Town (Pre-Renewal).
+//===== Additional Comments: =====================================
+//= This script is made for Ragnarok Offline Pre-Renewal Pack
+//= https://www.youtube.com/watch?v=aN5OCJdj2qA
+//============================================================
+
+
+//=============
+//= Gold Room
+//=============
+moc_ruins1	mapflag	nightenabled
+moc_ruins1	mapflag	nobank
+moc_ruins1	mapflag	nobranch
+moc_ruins1	mapflag	nobuyingstore
+moc_ruins1	mapflag	noexp
+moc_ruins1	mapflag	nogo
+moc_ruins1	mapflag	nomemo
+moc_ruins1	mapflag	nopenalty
+moc_ruins1	mapflag	nopetcapture
+moc_ruins1	mapflag	noreturn
+moc_ruins1	mapflag	norodex
+moc_ruins1	mapflag	nosave	SavePoint
+moc_ruins1	mapflag	noteleport
+moc_ruins1	mapflag	notrade
+moc_ruins1	mapflag	novending
+moc_ruins1	mapflag	nowarp
+moc_ruins1	mapflag	nowarpto
+moc_ruins1	mapflag	noloot

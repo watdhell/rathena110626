@@ -71,6 +71,7 @@ Body:
       breakguild: true
       storage: true
       gstorage: true
+      warp: true
       ### PvP Commands ###
       duel: true
       invite: true
@@ -207,7 +208,7 @@ Body:
     # Can do everything Players can
     Inherit:
       Player: true
-    Level: 0
+    Level: 1
     Commands:
       rates: true
       who: true

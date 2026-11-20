@@ -1,0 +1,68 @@
+aegis,88,72,4	script	Stat Seller	899,{
+
+
+	set .@SellStatPOD, 100;		//Stat Points per 1 POD
+	set .@SellStatTCG, 50;		//Stat Points per 1 TCG
+	set .@PODid, 7179;			//POD item id
+	set .@TCGid, 7227;			//TCG item id
+	set .@MaxStat, 1000000;		//Maximum Stat Points allowed to sell
+
+	mes "Hi ^FF0000"+strcharinfo(0)+"^000000!";
+	mes "Do you wish to buy Stat points?";
+	mes "1 POD = "+.@SellStatPOD+" stat points";
+	mes "1 TCG = "+.@SellStatTCG+" stat points";
+	mes "Maximum stat points can be purchase is "+.@MaxStat+".";
+	switch(select(" ~ Yes, using PODs: ~ Yes, using TCGs: ~ No")) {
+		case 1:
+			mes "How many PODs do you wish to exchange for stat points?";
+			input .@amount;
+			if (countitem(.@PODid) < .@amount) {
+				mes "Sorry, but don't have enough PODs in your inventory.";
+				mes " Please come back when you have enough.";
+				close;
+			}
+			else {
+				set .@StatToBe, StatBought+(.@amount*.@SellStatPOD);
+				if (.@MaxStat < .@StatToBe) {
+					mes "Sorry, but you're about to reach the max stat points that can be bought.";
+					mes "You have already purchase "+StatBought+" stat points.";
+					close;
+				}
+				else {
+					mes "Here you go!";
+					mes "Please use your stat point wisely.";
+					set StatusPoint, StatusPoint+(.@amount*.@SellStatPOD);
+					set StatBought, StatBought+(.@amount*.@SellStatPOD);
+					delitem .@PODid[.@StatBought],.@amount;
+					close;
+				}
+			}
+		case 2:
+			mes "How many TCGs do you wish to exchange for stat points?";
+			input .@amount;
+			if (countitem(.@TCGid) < .@amount) {
+				mes "Sorry, but don't have enough TCGs in your inventory.";
+				mes " Please come back when you have enough.";
+				close;
+			}
+			else {
+				set .@StatToBe, StatBought+(.@amount*.@SellStatTCG);
+				if (.@MaxStat < .@StatToBe) {
+					mes "Sorry, but you're about to reach the max stat points that can be bought.";
+					mes "You have already purchase "+StatBought+" stat points.";
+					close;
+				}
+				else {
+					mes "Here you go!";
+					mes "Please use your stat point wisely.";
+					set StatusPoint, StatusPoint+(.@amount*.@SellStatTCG);
+					set StatBought, StatBought+(.@amount*.@SellStatTCG);
+					delitem .@TCGid[.@StatBought],.@amount;
+					close;
+				}
+			}
+		case 3:
+			mes "I understand, Please come back to me whenever you change your mind.";
+			close;
+	}
+}
