@@ -1,0 +1,195 @@
+
+-	script	Global_MVP_Announcer	-1,{
+
+	OnInit:
+		// ==================================
+		// CONFIGURATION
+		// ==================================
+
+		.Enable_Spawn = 1;
+		.Enable_Kill = 1;
+
+		.Show_Killer = 1;
+		.Show_Party = 1;
+		.Show_Map = 1;
+
+		// GM level required for management
+		.GM_Level = 99;
+
+		// Announcement colors
+		.Spawn_Color = 0x00FF00;
+		.Kill_Color = 0xFFD700;
+
+		end;
+
+
+	// ==================================
+	// MVP KILL EVENT
+	// ==================================
+
+	OnNPCKillEvent:
+
+		if (!.Enable_Kill)
+			end;
+
+		// MVP database EXP check.
+		// Source-side MVP classification is used
+		// for spawn detection.
+		if (getmonsterinfo(killedrid, MOB_MVPEXP) <= 0)
+			end;
+
+		.@mob$ = getmonsterinfo(killedrid, MOB_NAME);
+
+		.@message$ = "[ MVP DEFEATED ] " + .@mob$;
+
+		if (.Show_Killer)
+			.@message$ += " killed by " + strcharinfo(0);
+
+		if (.Show_Party && getcharid(1))
+			.@message$ += " [Party: " + strcharinfo(1) + "]";
+
+		if (.Show_Map)
+			.@message$ += " at " + strcharinfo(3);
+
+		announce .@message$, bc_all, .Kill_Color;
+
+		end;
+
+
+	// ==================================
+	// GM MANAGEMENT NPC
+	// ==================================
+
+	OnGMPanel:
+
+		if (getgmlevel() < .GM_Level) {
+			dispbottom "You are not authorized.";
+			end;
+		}
+
+		mes "[Global MVP Announcer]";
+		mes "MVP announcement management.";
+		mes " ";
+		mes "Spawn announcements: " +
+			(.Enable_Spawn ? "^00AA00ON^000000" : "^FF0000OFF^000000");
+		mes "Kill announcements: " +
+			(.Enable_Kill ? "^00AA00ON^000000" : "^FF0000OFF^000000");
+		next;
+
+		switch(select(
+			"Test Broadcast:" +
+			"Toggle Spawn Announcements:" +
+			"Toggle Kill Announcements:" +
+			"Close"
+		)) {
+
+			case 1:
+				announce "[ MVP SYSTEM TEST ] Global MVP announcements are working!",
+					bc_all, 0x00FFFF;
+				mes "[Global MVP Announcer]";
+				mes "Test broadcast sent.";
+				close;
+
+			case 2:
+				.Enable_Spawn = !.Enable_Spawn;
+				mes "Spawn announcements are now " +
+					(.Enable_Spawn ? "ON." : "OFF.");
+				close;
+
+			case 3:
+				.Enable_Kill = !.Enable_Kill;
+				mes "Kill announcements are now " +
+					(.Enable_Kill ? "ON." : "OFF.");
+				close;
+
+			case 4:
+				close;
+		}
+}
+ 
+
+-	script	Global_MVP_Announcer	-1,{
+
+	OnInit:
+		// Initialize persistent mapreg settings once.
+		if (!$MVP_ANNOUNCE_INIT) {
+			$MVP_ANNOUNCE_KILL = 1;
+			$MVP_ANNOUNCE_INIT = 1;
+		}
+		end;
+
+	// ==================================
+	// GLOBAL MVP KILL ANNOUNCEMENT
+	// ==================================
+
+	OnNPCKillEvent:
+
+		if (!$MVP_ANNOUNCE_KILL)
+			end;
+
+		.@mobid = killedrid;
+
+		// Standard MVPs must have MVP EXP.
+		if (getmonsterinfo(.@mobid, MOB_MVPEXP) <= 0)
+			end;
+
+		.@mob$ = getmonsterinfo(.@mobid, MOB_NAME);
+
+		.@msg$ = "[ MVP DEFEATED ] " + .@mob$;
+
+		.@msg$ += " killed by " + strcharinfo(0);
+
+		if (getcharid(1))
+			.@msg$ += " [Party: " + strcharinfo(1) + "]";
+
+		.@msg$ += " at " + strcharinfo(3);
+
+		announce .@msg$, bc_all, 0xFFD700;
+		end;
+}
+
+
+prontera,150,180,4	script	MVP Announcement Admin	4_F_KAFRA1,{
+
+	// Change this to your desired GM level.
+	.@required_gm = 99;
+
+	if (getgmlevel() < .@required_gm) {
+		mes "[MVP Announcer]";
+		mes "You are not authorized.";
+		close;
+	}
+
+	mes "[MVP Announcer]";
+	mes "Global MVP Announcement Control";
+	mes " ";
+	mes "Kill announcements: " +
+		($MVP_ANNOUNCE_KILL ? "^00AA00ON^000000" : "^FF0000OFF^000000");
+
+	next;
+
+	switch(select(
+		"Test Global Broadcast:" +
+		"Toggle MVP Kill Announcements:" +
+		"Close"
+	)) {
+
+		case 1:
+			announce "[ MVP SYSTEM TEST ] Global MVP announcements are working!",
+				bc_all, 0x00FFFF;
+			mes "[MVP Announcer]";
+			mes "Test broadcast sent globally.";
+			close;
+
+		case 2:
+			$MVP_ANNOUNCE_KILL = !$MVP_ANNOUNCE_KILL;
+
+			mes "[MVP Announcer]";
+			mes "Kill announcements are now " +
+				($MVP_ANNOUNCE_KILL ? "ON." : "OFF.");
+			close;
+
+		case 3:
+			close;
+	}
+}

@@ -10,7 +10,7 @@
 //= 1.4 Added replay version of buff NPC [eppc0330]
 //============================================================
 
-prontera,155,168,3	script	Goldpoint Manager::GOLDPCCAFE	4_F_02,{
+-	script	Goldpoint Manager::GOLDPCCAFE	4_F_02,{
     // ID:AMOUNT:PRICE
     setarray .items$[1],
         "14003:5:3", // World_Tour_Ticket 1

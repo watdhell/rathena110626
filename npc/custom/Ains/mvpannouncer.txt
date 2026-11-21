@@ -1,0 +1,25 @@
+
+prontera,150,150,4	script	MVP Announcement Guide	4_F_KAFRA1,{
+
+	mes "[Global MVP System]";
+	mes " ";
+	mes "The server automatically announces";
+	mes "MVP spawns and MVP defeats globally.";
+	next;
+
+	mes "[Global MVP System]";
+	mes "Spawn announcements include:";
+	mes "- MVP name";
+	mes "- Map name";
+	mes "- Spawn coordinates";
+	next;
+
+	mes "[Global MVP System]";
+	mes "Defeat announcements include:";
+	mes "- MVP name";
+	mes "- MVP credited player";
+	mes "- Party name";
+	mes "- Map name";
+	mes "- Death coordinates";
+	close;
+}

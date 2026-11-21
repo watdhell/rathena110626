@@ -40,8 +40,36 @@
 #include "pc.hpp"
 #include "pet.hpp"
 #include "quest.hpp"
-
+#include <cstdio>
+#include <cstring>
 using namespace rathena;
+
+
+// =====================================================
+// GLOBAL MVP ANNOUNCEMENT CONFIGURATION
+// =====================================================
+
+static constexpr bool MVP_ANNOUNCE_SPAWN = true;
+static constexpr bool MVP_ANNOUNCE_KILL = true;
+
+// =====================================================
+// GLOBAL MVP BROADCAST
+// =====================================================
+
+static void mvp_global_announce(const char* message)
+{
+	if (message == nullptr || message[0] == '\0')
+		return;
+
+	clif_broadcast(
+		nullptr,
+		message,
+		strlen(message) + 1,
+		BC_ALL,
+		ALL_CLIENT
+	);
+}
+
 
 #define ACTIVE_AI_RANGE 4	//Distance added on top of 'AREA_SIZE' at which mobs enter active AI mode.
 
@@ -1216,6 +1244,29 @@ int32 mob_spawn (mob_data *md)
 
 	if(map_addblock(md))
 		return 2;
+	
+	// =================================================
+	// GLOBAL MVP SPAWN ANNOUNCEMENT
+	// =================================================
+
+	if (MVP_ANNOUNCE_SPAWN &&
+		md->get_bosstype() == BOSSTYPE_MVP)
+	{
+//		const char* mapname = map_mapid2mapname(md->m);
+
+		char message[CHAT_SIZE_MAX];
+
+    snprintf(
+        message,
+        sizeof(message),
+        "[ MVP SPAWN ] %s has spawned at %s!",
+        md->db->name.c_str(),
+        map_getmapdata(md->m)->name
+		);
+
+		mvp_global_announce(message);
+	}
+
 	if( map_getmapdata(md->m)->users )
 		clif_spawn(md);
 	skill_unit_move(md,tick,1);
@@ -3069,6 +3120,52 @@ int32 mob_dead(mob_data *md, block_list *src, int32 type)
 
 	// Determine MVP (need to do it here so that it's not influenced by first attacker bonus below)
 	map_session_data* mvp_sd = md->get_mvp_player(first_sd);
+
+	// =================================================
+	// GLOBAL MVP DEFEAT ANNOUNCEMENT
+	// =================================================
+
+	if (MVP_ANNOUNCE_KILL &&
+		md->get_bosstype() == BOSSTYPE_MVP)
+	{
+		const char* mapname = map_mapid2mapname(md->m);
+
+		const char* killer = mvp_sd
+			? mvp_sd->status.name
+			: "Unknown";
+
+		char party_name[NAME_LENGTH] = "No Party";
+
+		if (mvp_sd && mvp_sd->status.party_id)
+		{
+			party_data* party =
+				party_search(mvp_sd->status.party_id);
+
+			if (party)
+				safestrncpy(
+					party_name,
+					party->party.name,
+					sizeof(party_name)
+				);
+		}
+
+		char message[CHAT_SIZE_MAX];
+
+		snprintf(
+			message,
+			sizeof(message),
+			"[ MVP DEFEATED ] %s was defeated by %s "
+			"[ Party: %s ] at %s (%d, %d)!",
+			md->name,
+			killer,
+			party_name,
+			mapname ? mapname : "Unknown Map",
+			md->x,
+			md->y
+		);
+
+		mvp_global_announce(message);
+	}
 
 	if(battle_config.exp_calc_type == 2 && count > 1) {	//Apply first-attacker 200% exp share bonus
 		s_dmglog& entry = md->dmglog[0];
